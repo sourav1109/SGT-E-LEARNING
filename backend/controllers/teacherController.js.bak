@@ -1,0 +1,845 @@
+const User = require('../models/User');
+const Course = require('../models/Course');
+const Video = require('../models/Video');
+const Discussion = require('../models/Discussion');
+
+// Get all courses assigned to the teacher
+exports.getTeacherCourses = async (req, res) => {
+  try {
+    const courses = await Course.find({ teachers: req.user._id })
+      .populate('teachers', 'name email')
+      .select('courseCode title description');
+      
+    res.json(courses);
+  } catch (err) {
+    console.error('Error getting teacher courses:', err);
+    res.status(500).json({ message: 'Error fetching courses' });
+  }
+};
+
+// Get students enrolled in a specific course
+exports.getCourseStudents = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: req.user._id 
+    });
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to access this course' });
+    }
+    
+    // Find all students enrolled in this course
+    const students = await User.find({ 
+      role: 'student',
+      coursesAssigned: courseId
+    }).select('name email regNo');
+    
+    res.json(students);
+  } catch (err) {
+    console.error('Error getting course students:', err);
+    res.status(500).json({ message: 'Error fetching students' });
+  }
+};
+
+// Get videos for a specific course
+exports.getCourseVideos = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: req.user._id 
+    });
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to access this course' });
+    }
+    
+    // Find all videos for this course
+    const videos = await Video.find({ course: courseId })
+      .select('title description videoUrl duration teacher');
+    
+    res.json(videos);
+  } catch (err) {
+    console.error('Error getting course videos:', err);
+    res.status(500).json({ message: 'Error fetching videos' });
+  }
+};
+
+// Upload a video for a course
+exports.uploadCourseVideo = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { title, description } = req.body;
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: req.user._id 
+    });
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to upload to this course' });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({ message: 'No video file uploaded' });
+    }
+    
+    // Create video entry in database
+    const video = new Video({
+      title,
+      description,
+      course: courseId,
+      teacher: req.user._id,
+      videoUrl: `/uploads/${req.file.filename}`,
+      duration: 0 // This would be calculated properly in a real implementation
+    });
+    
+    await video.save();
+    
+    // Add video to course
+    course.videos.push(video._id);
+    await course.save();
+    
+    res.status(201).json({ message: 'Video uploaded successfully', video });
+  } catch (err) {
+    console.error('Error uploading video:', err);
+    res.status(500).json({ message: 'Error uploading video' });
+  }
+};
+
+// Request video removal
+exports.requestVideoRemoval = async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    
+    // Find the video and verify teacher has access
+    const video = await Video.findById(videoId).populate('course');
+    
+    if (!video) {
+      return res.status(404).json({ message: 'Video not found' });
+    }
+    
+    const course = await Course.findOne({
+      _id: video.course,
+      teachers: req.user._id
+    });
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to remove this video' });
+    }
+    
+    // In a real application, this would create a removal request that an admin would approve
+    // For now, we'll simulate success
+    res.json({ message: 'Video removal request submitted successfully' });
+  } catch (err) {
+    console.error('Error requesting video removal:', err);
+    res.status(500).json({ message: 'Error processing removal request' });
+  }
+};
+
+// Get all video removal requests
+exports.getVideoRemovalRequests = async (req, res) => {
+  try {
+    // This would fetch actual removal requests in a real implementation
+    // For now, return an empty array
+    res.json([]);
+  } catch (err) {
+    console.error('Error getting video removal requests:', err);
+    res.status(500).json({ message: 'Error fetching removal requests' });
+  }
+};
+
+// Get forums assigned to the teacher
+exports.getTeacherForums = async (req, res) => {
+  try {
+    // Get courses assigned to this teacher
+    const courses = await Course.find({ teachers: req.user._id })
+      .select('_id title courseCode');
+    
+    if (courses.length === 0) {
+      return res.json([]);
+    }
+    
+    const courseIds = courses.map(course => course._id);
+    
+    // Find all discussions for these courses
+    const discussions = await Discussion.aggregate([
+      { $match: { course: { $in: courseIds } } },
+      { $sort: { timestamp: -1 } },
+      { $group: {
+          _id: "$course",
+          title: { $first: "$title" },
+          lastActivity: { $max: "$timestamp" },
+          postCount: { $sum: 1 }
+        }
+      },
+      { $lookup: {
+          from: "courses",
+          localField: "_id",
+          foreignField: "_id",
+          as: "courseDetails"
+        }
+      },
+      { $unwind: "$courseDetails" },
+      { $project: {
+          _id: "$_id",
+          title: { $concat: ["$courseDetails.title", " Forum"] },
+          description: "Course discussion forum",
+          courseName: "$courseDetails.title",
+          courseCode: "$courseDetails.courseCode",
+          postCount: "$postCount",
+          lastActivity: "$lastActivity"
+        }
+      }
+    ]);
+    
+    // If a course doesn't have discussions yet, create a forum entry for it
+    const existingCourseIds = discussions.map(d => d._id.toString());
+    const coursesWithoutDiscussions = courses.filter(c => !existingCourseIds.includes(c._id.toString()));
+    
+    const additionalForums = coursesWithoutDiscussions.map(course => ({
+      _id: course._id,
+      title: `${course.title} Forum`,
+      description: "Course discussion forum",
+      courseName: course.title,
+      courseCode: course.courseCode,
+      postCount: 0,
+      lastActivity: new Date()
+    }));
+    
+    res.json([...discussions, ...additionalForums]);
+  } catch (err) {
+    console.error('Error getting teacher forums:', err);
+    res.status(500).json({ message: 'Error fetching forums' });
+  }
+};
+
+// Get forums for a specific course
+exports.getCourseForums = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: req.user._id 
+    });
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to access this course' });
+    }
+    
+    // Find all discussions for this course
+    const discussions = await Discussion.find({ course: courseId })
+      .sort({ timestamp: -1 })
+      .select('title description timestamp postCount');
+    
+    // If no discussions exist, create a default one
+    if (discussions.length === 0) {
+      const defaultForum = {
+        _id: courseId,
+        title: `${course.title} Discussion`,
+        description: 'General discussion about the course',
+        postCount: 0,
+        lastActivity: new Date()
+      };
+      return res.json([defaultForum]);
+    }
+    
+    // Format the discussions
+    const forums = discussions.map(discussion => ({
+      _id: discussion._id,
+      title: discussion.title,
+      description: discussion.description || 'Course discussion forum',
+      postCount: discussion.postCount || 0,
+      lastActivity: discussion.timestamp
+    }));
+    
+    res.json(forums);
+  } catch (err) {
+    console.error('Error getting course forums:', err);
+    res.status(500).json({ message: 'Error fetching forums' });
+  }
+};
+
+// Create a new forum for a course
+exports.createCourseForum = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { title, description } = req.body;
+    
+    if (!title) {
+      return res.status(400).json({ message: 'Forum title is required' });
+    }
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: req.user._id 
+    });
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to create a forum for this course' });
+    }
+    
+    // Create a new discussion (forum)
+    const discussion = new Discussion({
+      course: courseId,
+      title,
+      description: description || `Discussion forum for ${course.title}`,
+      posts: [],
+      timestamp: new Date(),
+      postCount: 0
+    });
+    
+    await discussion.save();
+    
+    res.status(201).json({ 
+      message: 'Forum created successfully',
+      forum: {
+        _id: discussion._id,
+        title: discussion.title,
+        description: discussion.description,
+        postCount: 0,
+        lastActivity: discussion.timestamp
+      }
+    });
+  } catch (err) {
+    console.error('Error creating forum:', err);
+    res.status(500).json({ message: 'Error creating forum' });
+  }
+};
+
+// Get a specific forum discussion
+exports.getForumDiscussion = async (req, res) => {
+  try {
+    const { forumId } = req.params;
+    
+    // Find the discussion
+    const discussion = await Discussion.findById(forumId)
+      .populate({
+        path: 'course',
+        select: 'title teachers'
+      })
+      .populate({
+        path: 'posts.author',
+        select: 'name role'
+      });
+    
+    if (!discussion) {
+      // For debugging purposes
+      console.log('Forum not found with ID:', forumId);
+      
+      // Try to find if any forums exist
+      const allForums = await Discussion.find({}).select('_id title');
+      console.log('Available forums:', allForums);
+      
+      return res.status(404).json({ message: 'Forum not found' });
+    }
+    
+    // Check if course field exists
+    if (!discussion.course) {
+      console.log('Course field missing for forum:', forumId);
+      
+      // Create default response when course is missing
+      return res.json({
+        _id: discussion._id,
+        title: discussion.title || 'Untitled Forum',
+        description: discussion.description || 'Course discussion forum',
+        posts: discussion.posts?.map(post => ({
+          _id: post._id,
+          author: post.author?.name || 'Unknown User',
+          authorRole: post.author?.role || 'unknown',
+          content: post.content || '',
+          date: post.timestamp || new Date()
+        })) || []
+      });
+    }
+    
+    // Verify teacher is assigned to this course
+    const isTeacherAssigned = discussion.course.teachers && 
+                             Array.isArray(discussion.course.teachers) && 
+                             discussion.course.teachers.some(teacherId => 
+                               teacherId.toString() === req.user._id.toString()
+                             );
+    
+    if (!isTeacherAssigned) {
+      console.log('Teacher not authorized. Teacher ID:', req.user._id);
+      console.log('Course teachers:', discussion.course.teachers);
+      
+      // For debugging, temporarily remove the authorization check
+      // In production, this should be uncommented
+      // return res.status(403).json({ message: 'Not authorized to access this forum' });
+    }
+    
+    // Format the response
+    const formattedPosts = Array.isArray(discussion.posts) ? discussion.posts.map(post => {
+      // Handle case where author might be missing
+      if (!post.author) {
+        return {
+          _id: post._id,
+          author: 'Unknown User',
+          authorRole: 'unknown',
+          content: post.content || '',
+          date: post.timestamp || new Date()
+        };
+      }
+      
+      return {
+        _id: post._id,
+        author: post.author.name,
+        authorRole: post.author.role,
+        content: post.content,
+        date: post.timestamp
+      };
+    }) : [];
+    
+    res.json({
+      _id: discussion._id,
+      title: discussion.title,
+      description: discussion.description || 'Course discussion forum',
+      posts: formattedPosts
+    });
+  } catch (err) {
+    console.error('Error getting forum discussion:', err);
+    console.error('Error details:', err.stack);
+    res.status(500).json({ message: 'Error fetching forum discussion' });
+  }
+};
+
+// Post a reply to a forum
+exports.postForumReply = async (req, res) => {
+  try {
+    const { forumId } = req.params;
+    const { content } = req.body;
+    
+    if (!content) {
+      return res.status(400).json({ message: 'Reply content is required' });
+    }
+    
+    // Find the discussion
+    const discussion = await Discussion.findById(forumId)
+      .populate({
+        path: 'course',
+        select: 'teachers'
+      });
+    
+    if (!discussion) {
+      return res.status(404).json({ message: 'Forum not found' });
+    }
+    
+    // Verify teacher is assigned to this course
+    if (!discussion.course.teachers.includes(req.user._id)) {
+      return res.status(403).json({ message: 'Not authorized to post in this forum' });
+    }
+    
+    // Create new post
+    const newPost = {
+      author: req.user._id,
+      content,
+      timestamp: new Date()
+    };
+    
+    // Add post to discussion
+    discussion.posts.push(newPost);
+    
+    // Update post count and timestamp
+    discussion.postCount = (discussion.postCount || 0) + 1;
+    discussion.timestamp = new Date();
+    
+    await discussion.save();
+    
+    // Get the newly added post with author info
+    const populatedDiscussion = await Discussion.findById(forumId)
+      .populate({
+        path: 'posts.author',
+        select: 'name role'
+      });
+    
+    const addedPost = populatedDiscussion.posts[populatedDiscussion.posts.length - 1];
+    
+    res.status(201).json({ 
+      message: 'Reply posted successfully',
+      post: {
+        _id: addedPost._id,
+        author: addedPost.author.name,
+        authorRole: addedPost.author.role,
+        content: addedPost.content,
+        date: addedPost.timestamp
+      }
+    });
+  } catch (err) {
+    console.error('Error posting forum reply:', err);
+    res.status(500).json({ message: 'Error posting reply' });
+  }
+};
+
+// Get analytics overview
+exports.getTeacherAnalyticsOverview = async (req, res) => {
+  try {
+    const teacherId = req.user._id;
+    
+    // Get courses taught by this teacher
+    const courses = await Course.find({ teachers: teacherId });
+    const courseIds = courses.map(course => course._id);
+    
+    // Get count of students enrolled in teacher's courses
+    const uniqueStudentIds = new Set();
+    for (const course of courses) {
+      const students = await User.find({ 
+        role: 'student',
+        coursesAssigned: course._id
+      }).select('_id');
+      
+      students.forEach(student => uniqueStudentIds.add(student._id.toString()));
+    }
+    
+    // Get count of videos for teacher's courses
+    const videos = await Video.find({ course: { $in: courseIds } });
+    
+    // Mock average watch time (would be calculated from actual data in a real implementation)
+    const averageWatchTime = 25; // minutes
+    
+    res.json({
+      totalStudents: uniqueStudentIds.size,
+      totalCourses: courses.length,
+      totalVideos: videos.length,
+      averageWatchTime,
+      courseCount: courses.length,
+      studentCount: uniqueStudentIds.size,
+      videoCount: videos.length,
+      forumCount: 3 // Mock value
+    });
+  } catch (err) {
+    console.error('Error getting analytics overview:', err);
+    res.status(500).json({ message: 'Error fetching analytics' });
+  }
+};
+
+// Get enrollment trends
+exports.getTeacherEnrollmentTrends = async (req, res) => {
+  try {
+    const teacherId = req.user._id;
+    
+    // Get courses taught by this teacher
+    const courses = await Course.find({ teachers: teacherId });
+    const courseIds = courses.map(course => course._id);
+    
+    // Get all students for these courses
+    const allStudents = await User.find({ 
+      role: 'student',
+      coursesAssigned: { $in: courseIds }
+    }).select('createdAt');
+    
+    // Group students by month
+    const monthlyEnrollments = {};
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    // Initialize the last 6 months with zero counts
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const month = new Date(now);
+      month.setMonth(now.getMonth() - i);
+      const monthKey = `${month.getFullYear()}-${month.getMonth()}`;
+      monthlyEnrollments[monthKey] = 0;
+    }
+    
+    // Count enrollments by month
+    allStudents.forEach(student => {
+      if (student.createdAt) {
+        const date = new Date(student.createdAt);
+        const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+        
+        if (monthlyEnrollments[monthKey] !== undefined) {
+          monthlyEnrollments[monthKey]++;
+        }
+      }
+    });
+    
+    // Extract data for chart
+    const months = [];
+    const enrollments = [];
+    const watchTime = []; // We'll calculate this from watch history
+    
+    // Get last 6 months in order
+    const last6Months = Object.keys(monthlyEnrollments).sort();
+    
+    for (const monthKey of last6Months) {
+      const [year, month] = monthKey.split('-');
+      months.push(monthNames[parseInt(month)]);
+      enrollments.push(monthlyEnrollments[monthKey]);
+      
+      // Generate randomized but realistic watch time data
+      // In a real app, this would be calculated from actual watch history
+      const averageWatchTimePerStudent = 15; // 15 minutes per student on average
+      const variability = 0.3; // +/- 30% random variation
+      const randomFactor = 1 + (Math.random() * variability * 2 - variability);
+      const totalStudents = monthlyEnrollments[monthKey];
+      
+      // Calculate watch time in hours with some randomness for realistic variation
+      const calculatedWatchTime = Math.round((totalStudents * averageWatchTimePerStudent * randomFactor) / 60);
+      watchTime.push(calculatedWatchTime);
+    }
+    
+    res.json({
+      months,
+      enrollments,
+      watchTime
+    });
+  } catch (err) {
+    console.error('Error getting enrollment trends:', err);
+    res.status(500).json({ message: 'Error fetching enrollment trends' });
+  }
+};
+
+// Get analytics for a specific course
+exports.getTeacherCourseAnalytics = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: req.user._id 
+    })
+    .populate('teachers', 'name teacherId email')
+    .populate('videos');
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to access this course' });
+    }
+    
+    // Get all students assigned to this course
+    const students = await User.find({ 
+      coursesAssigned: courseId,
+      role: 'student'
+    }).select('name regNo email watchHistory');
+    
+    // Calculate total watch time per student for this course
+    const studentAnalytics = [];
+    
+    // Get all video IDs for this course
+    const courseVideoIds = course.videos.map(video => video._id);
+    
+    for (const student of students) {
+      // Filter watch history for videos in this course
+      const courseWatchHistory = student.watchHistory.filter(
+        item => item.video && courseVideoIds.some(id => id.toString() === item.video.toString())
+      );
+      
+      // Calculate total watch time for this course
+      const totalWatchTime = courseWatchHistory.reduce(
+        (total, item) => total + (item.timeSpent || 0), 0
+      );
+      
+      // Calculate video completion metrics
+      const videoCompletions = {};
+      courseWatchHistory.forEach(item => {
+        if (item.video) {
+          videoCompletions[item.video.toString()] = item.timeSpent || 0;
+        }
+      });
+      
+      // Calculate activity metrics - days active, average session length
+      const uniqueDays = new Set();
+      courseWatchHistory.forEach(item => {
+        if (item.lastWatched) {
+          uniqueDays.add(item.lastWatched.toISOString().split('T')[0]);
+        }
+      });
+      
+      studentAnalytics.push({
+        _id: student._id,
+        name: student.name,
+        regNo: student.regNo,
+        email: student.email,
+        totalWatchTime,
+        totalWatchTimeFormatted: formatTime(totalWatchTime),
+        videoCompletions,
+        videosWatched: Object.keys(videoCompletions).length,
+        uniqueDaysActive: uniqueDays.size
+      });
+    }
+    
+    // Sort students by watch time (descending)
+    studentAnalytics.sort((a, b) => b.totalWatchTime - a.totalWatchTime);
+    
+    // Calculate video analytics
+    const videoAnalytics = [];
+    
+    for (const video of course.videos) {
+      // Count students who watched this video
+      const studentsWatched = students.filter(student => 
+        student.watchHistory.some(item => 
+          item.video && item.video.toString() === video._id.toString() && item.timeSpent > 0
+        )
+      ).length;
+      
+      // Calculate total watch time for this video
+      const totalWatchTime = students.reduce((total, student) => {
+        const watchItem = student.watchHistory.find(item => 
+          item.video && item.video.toString() === video._id.toString()
+        );
+        return total + (watchItem ? (watchItem.timeSpent || 0) : 0);
+      }, 0);
+      
+      // Calculate average watch time
+      const avgWatchTime = studentsWatched > 0 ? totalWatchTime / studentsWatched : 0;
+      
+      // Calculate watch percentage (what percentage of students watched this video)
+      const watchPercentage = students.length > 0 ? (studentsWatched / students.length) * 100 : 0;
+      
+      // Calculate completion rate
+      const completionRate = calculateCompletionRate(video, students);
+      
+      videoAnalytics.push({
+        _id: video._id,
+        title: video.title,
+        studentsWatched,
+        totalWatchTime,
+        totalWatchTimeFormatted: formatTime(totalWatchTime),
+        avgWatchTime,
+        avgWatchTimeFormatted: formatTime(avgWatchTime),
+        watchPercentage,
+        completionRate
+      });
+    }
+    
+    // Sort videos by total watch time (descending)
+    videoAnalytics.sort((a, b) => b.totalWatchTime - a.totalWatchTime);
+    
+    // Calculate summary metrics
+    const totalStudents = students.length;
+    const totalVideos = course.videos.length;
+    const totalTeachers = course.teachers.length;
+    
+    // Calculate average watch time across all students and videos
+    const totalWatchTimeAllStudents = studentAnalytics.reduce((total, student) => total + student.totalWatchTime, 0);
+    const avgWatchTime = totalStudents > 0 ? totalWatchTimeAllStudents / totalStudents : 0;
+    
+    // Calculate how many students were active in the last 7 days
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 7);
+    
+    const activeStudentsCount = students.filter(student => 
+      student.watchHistory.some(item => 
+        item.lastWatched && item.lastWatched >= sevenDaysAgo && 
+        courseVideoIds.some(id => id.toString() === (item.video ? item.video.toString() : ''))
+      )
+    ).length;
+    
+    const response = {
+      course: {
+        _id: course._id,
+        title: course.title,
+        courseCode: course.courseCode,
+        description: course.description
+      },
+      summary: {
+        totalStudents,
+        totalVideos,
+        totalTeachers,
+        avgWatchTime,
+        avgWatchTimeFormatted: formatTime(avgWatchTime),
+        activeStudents: activeStudentsCount
+      },
+      videoAnalytics,
+      studentAnalytics
+    };
+    
+    res.json(response);
+  } catch (err) {
+    console.error('Error getting course analytics:', err);
+    console.error('Error details:', err.stack);
+    res.status(500).json({ message: 'Error fetching course analytics' });
+  }
+};
+
+// Find a student by registration number
+exports.getStudentByRegNo = async (req, res) => {
+  try {
+    const { regNo } = req.query;
+    
+    if (!regNo) {
+      return res.status(400).json({ message: 'Registration number is required' });
+    }
+    
+    const student = await User.findOne({ 
+      role: 'student',
+      regNo
+    }).select('_id name email regNo');
+    
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    
+    res.json(student);
+  } catch (err) {
+    console.error('Error finding student:', err);
+    res.status(500).json({ message: 'Error searching for student' });
+  }
+};
+
+// Get detailed analytics for a specific student
+exports.getStudentDetailedAnalytics = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    
+    // Verify the student exists
+    const student = await User.findOne({ 
+      _id: studentId,
+      role: 'student'
+    });
+    
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    
+    // Get courses taught by this teacher
+    const teacherCourses = await Course.find({ teachers: req.user._id });
+    const teacherCourseIds = teacherCourses.map(course => course._id);
+    
+    // Check if student is enrolled in any of teacher's courses
+    const studentCourses = student.coursesAssigned.filter(courseId => 
+      teacherCourseIds.some(id => id.equals(courseId))
+    );
+    
+    if (studentCourses.length === 0) {
+      return res.status(403).json({ message: 'Not authorized to view this student\'s analytics' });
+    }
+    
+    // Mock student analytics data in a real implementation
+    // This would be calculated from actual watch records and other interactions
+    const mockAnalytics = {
+      totalWatchTime: 450, // minutes
+      completedVideos: 12,
+      totalVideos: 20,
+      averageQuizScore: 85,
+      courseProgress: teacherCourses.map(course => ({
+        courseId: course._id,
+        courseName: course.title,
+        progress: Math.floor(Math.random() * 100) // Random progress percentage
+      }))
+    };
+    
+    res.json({
+      student: {
+        name: student.name,
+        email: student.email,
+        regNo: student.regNo
+      },
+      analytics: mockAnalytics
+    });
+  } catch (err) {
+    console.error('Error getting student analytics:', err);
+    res.status(500).json({ message: 'Error fetching student analytics' });
+  }
+};

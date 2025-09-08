@@ -1,0 +1,894 @@
+const Course = require('../models/Course');
+const Video = require('../models/Video');
+const User = require('../models/User');
+const Forum = require('../models/Forum');
+const Discussion = require('../models/Discussion');
+const mongoose = require('mongoose');
+const { validationResult } = require('express-validator');
+
+// Dashboard data for teachers
+exports.getDashboardData = async (req, res) => {
+  try {
+    const teacherId = req.user._id;
+    
+    // Get assigned courses
+    const courses = await Course.find({ teachers: teacherId });
+    
+    // Extract all course IDs
+    const courseIds = courses.map(course => course._id);
+    
+    // Get student count across all courses
+    const studentsCount = await User.countDocuments({ 
+      role: 'student',
+      coursesAssigned: { $in: courseIds } 
+    });
+    
+    // Get videos count across all courses
+    const videosCount = await Video.countDocuments({ 
+      course: { $in: courseIds } 
+    });
+    
+    // Get forums count across all courses
+    const forumsCount = await Forum.countDocuments({ 
+      course: { $in: courseIds } 
+    });
+    
+    // Get recent forum discussions
+    const recentDiscussions = await Discussion.find({
+      forum: { $in: await Forum.find({ course: { $in: courseIds } }).distinct('_id') }
+    })
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .populate('forum', 'title')
+    .populate('user', 'name role');
+    
+    // Format recent discussions for frontend
+    const formattedDiscussions = recentDiscussions.map(discussion => ({
+      id: discussion._id,
+      title: discussion.title,
+      forum: discussion.forum ? discussion.forum.title : 'Unknown Forum',
+      user: discussion.user ? discussion.user.name : 'Unknown User',
+      userRole: discussion.user ? discussion.user.role : 'unknown',
+      createdAt: discussion.createdAt
+    }));
+    
+    // Get upcoming events (if you have any events in your system)
+    // This is just a placeholder - replace with actual data if you have events
+    const upcomingEvents = [];
+    
+    res.json({
+      coursesCount: courses.length,
+      studentsCount,
+      videosCount,
+      forumsCount,
+      recentDiscussions: formattedDiscussions,
+      upcomingEvents
+    });
+  } catch (err) {
+    console.error('Error fetching dashboard data:', err);
+    res.status(500).json({ message: 'Failed to load dashboard data' });
+  }
+};
+
+// Get all courses assigned to the teacher
+exports.getTeacherCourses = async (req, res) => {
+  try {
+    const teacherId = req.user._id;
+    
+    // Get courses assigned to this teacher
+    const courses = await Course.find({ teachers: teacherId })
+      .populate('teachers', 'name email')
+      .sort({ createdAt: -1 });
+    
+    res.json(courses);
+  } catch (err) {
+    console.error('Error fetching teacher courses:', err);
+    res.status(500).json({ message: 'Failed to load courses' });
+  }
+};
+
+// Get details of a specific course
+exports.getCourseDetails = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const teacherId = req.user._id;
+    
+    // Check if teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: teacherId 
+    })
+    .populate('teachers', 'name email')
+    .populate('students', 'name email regNo');
+    
+    if (!course) {
+      return res.status(404).json({ message: 'Course not found or not authorized' });
+    }
+    
+    res.json(course);
+  } catch (err) {
+    console.error('Error fetching course details:', err);
+    res.status(500).json({ message: 'Failed to load course details' });
+  }
+};
+
+// Get all videos for a specific course
+exports.getCourseVideos = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const teacherId = req.user._id;
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: teacherId 
+    });
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to access this course' });
+    }
+    
+    // Get videos for this course
+    const videos = await Video.find({ course: courseId })
+      .sort({ createdAt: -1 });
+    
+    res.json(videos);
+  } catch (err) {
+    console.error('Error fetching course videos:', err);
+    res.status(500).json({ message: 'Failed to load videos' });
+  }
+};
+
+// Get students enrolled in a course
+exports.getCourseStudents = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const teacherId = req.user._id;
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: teacherId 
+    });
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to access this course' });
+    }
+    
+    // Get all students assigned to this course
+    const students = await User.find({ 
+      coursesAssigned: courseId,
+      role: 'student'
+    }).select('name email regNo');
+    
+    res.json(students);
+  } catch (err) {
+    console.error('Error fetching course students:', err);
+    res.status(500).json({ message: 'Failed to load students' });
+  }
+};
+
+// Get a list of students for a teacher
+exports.getTeacherStudents = async (req, res) => {
+  try {
+    const teacherId = req.user._id;
+    
+    // Get courses assigned to this teacher
+    const courses = await Course.find({ teachers: teacherId });
+    const courseIds = courses.map(course => course._id);
+    
+    // Get all students assigned to these courses
+    const students = await User.find({ 
+      coursesAssigned: { $in: courseIds },
+      role: 'student'
+    }).select('name email regNo coursesAssigned');
+    
+    // Prepare response with course information
+    const formattedStudents = await Promise.all(students.map(async (student) => {
+      // Filter courses to only include those that this teacher teaches
+      const studentCourses = await Course.find({
+        _id: { $in: student.coursesAssigned, $in: courseIds }
+      }).select('title courseCode');
+      
+      return {
+        _id: student._id,
+        name: student.name,
+        email: student.email,
+        regNo: student.regNo,
+        courses: studentCourses
+      };
+    }));
+    
+    res.json(formattedStudents);
+  } catch (err) {
+    console.error('Error fetching teacher students:', err);
+    res.status(500).json({ message: 'Failed to load students' });
+  }
+};
+
+// Upload a new video for a course
+exports.uploadVideo = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    
+    const { title, description, url, duration, courseId } = req.body;
+    const teacherId = req.user._id;
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: teacherId 
+    });
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to upload videos to this course' });
+    }
+    
+    // Create new video
+    const newVideo = new Video({
+      title,
+      description,
+      url,
+      duration,
+      course: courseId,
+      uploadedBy: teacherId
+    });
+    
+    await newVideo.save();
+    
+    // Add video to course
+    course.videos.push(newVideo._id);
+    await course.save();
+    
+    res.status(201).json(newVideo);
+  } catch (err) {
+    console.error('Error uploading video:', err);
+    res.status(500).json({ message: 'Failed to upload video' });
+  }
+};
+
+// Get courses for forum selection
+exports.getForumCourses = async (req, res) => {
+  try {
+    const teacherId = req.user._id;
+    
+    // Get courses assigned to this teacher
+    const courses = await Course.find({ teachers: teacherId })
+      .select('title courseCode')
+      .sort({ title: 1 });
+    
+    res.json(courses);
+  } catch (err) {
+    console.error('Error fetching courses for forums:', err);
+    res.status(500).json({ message: 'Failed to load courses' });
+  }
+};
+
+// Get forums for a course
+exports.getCourseForums = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const teacherId = req.user._id;
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: teacherId 
+    });
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to access this course' });
+    }
+    
+    // Get forums for this course
+    const forums = await Forum.find({ course: courseId })
+      .populate('createdBy', 'name role')
+      .sort({ createdAt: -1 });
+    
+    res.json(forums);
+  } catch (err) {
+    console.error('Error fetching course forums:', err);
+    res.status(500).json({ message: 'Failed to load forums' });
+  }
+};
+
+// Create a new forum for a course
+exports.createForum = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    
+    const { title, description, courseId } = req.body;
+    const teacherId = req.user._id;
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: teacherId 
+    });
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to create forums for this course' });
+    }
+    
+    // Create new forum
+    const newForum = new Forum({
+      title,
+      description,
+      course: courseId,
+      createdBy: teacherId
+    });
+    
+    await newForum.save();
+    
+    res.status(201).json(newForum);
+  } catch (err) {
+    console.error('Error creating forum:', err);
+    res.status(500).json({ message: 'Failed to create forum' });
+  }
+};
+
+// Get analytics overview for a teacher
+exports.getAnalyticsOverview = async (req, res) => {
+  try {
+    const teacherId = req.user._id;
+    
+    // Get courses assigned to this teacher
+    const courses = await Course.find({ teachers: teacherId });
+    const courseIds = courses.map(course => course._id);
+    
+    // Calculate total students
+    const totalStudents = await User.countDocuments({ 
+      coursesAssigned: { $in: courseIds },
+      role: 'student'
+    });
+    
+    // Calculate total videos
+    const totalVideos = await Video.countDocuments({ 
+      course: { $in: courseIds } 
+    });
+    
+    // Calculate recently active students (in last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const activeStudents = await User.countDocuments({
+      coursesAssigned: { $in: courseIds },
+      role: 'student',
+      lastActive: { $gte: sevenDaysAgo }
+    });
+    
+    // Calculate active students percentage
+    const activeStudentsPercentage = totalStudents > 0 ? (activeStudents / totalStudents) * 100 : 0;
+    
+    res.json({
+      totalStudents,
+      totalCourses: courses.length,
+      totalVideos,
+      activeStudents,
+      activeStudentsPercentage
+    });
+  } catch (err) {
+    console.error('Error fetching analytics overview:', err);
+    res.status(500).json({ message: 'Failed to load analytics overview' });
+  }
+};
+
+// Get enrollment trends
+exports.getEnrollmentTrends = async (req, res) => {
+  try {
+    const teacherId = req.user._id;
+    const { period } = req.query;
+    
+    // Get courses assigned to this teacher
+    const courses = await Course.find({ teachers: teacherId });
+    const courseIds = courses.map(course => course._id);
+    
+    // Dummy data for trends - in a real implementation, you would calculate this from actual enrollment dates
+    let enrollmentTrends = [];
+    
+    if (period === 'daily') {
+      // Daily trends for the last 14 days
+      for (let i = 13; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        
+        enrollmentTrends.push({
+          label: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          count: Math.floor(Math.random() * 10) // Random value between 0-10
+        });
+      }
+    } else if (period === 'weekly') {
+      // Weekly trends for the last 10 weeks
+      for (let i = 9; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - (i * 7));
+        
+        enrollmentTrends.push({
+          label: `Week ${10-i}`,
+          count: Math.floor(Math.random() * 30) + 5 // Random value between 5-35
+        });
+      }
+    } else {
+      // Monthly trends for the last 6 months
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const currentMonth = new Date().getMonth();
+      
+      for (let i = 5; i >= 0; i--) {
+        const monthIndex = (currentMonth - i + 12) % 12; // Handle wrapping around to previous year
+        
+        enrollmentTrends.push({
+          label: monthNames[monthIndex],
+          count: Math.floor(Math.random() * 50) + 20 // Random value between 20-70
+        });
+      }
+    }
+    
+    res.json(enrollmentTrends);
+  } catch (err) {
+    console.error('Error fetching enrollment trends:', err);
+    res.status(500).json({ message: 'Failed to load enrollment trends' });
+  }
+};
+
+// Get analytics for a specific course
+exports.getTeacherCourseAnalytics = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    
+    // Verify teacher is assigned to this course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: req.user._id 
+    })
+    .populate('teachers', 'name teacherId email')
+    .populate('videos');
+    
+    if (!course) {
+      return res.status(403).json({ message: 'Not authorized to access this course' });
+    }
+    
+    // Get all students assigned to this course
+    const students = await User.find({ 
+      coursesAssigned: courseId,
+      role: 'student'
+    }).select('name regNo email watchHistory');
+    
+    // Calculate total watch time per student for this course
+    const studentAnalytics = [];
+    
+    // Get all video IDs for this course
+    const courseVideoIds = course.videos.map(video => video._id);
+    
+    for (const student of students) {
+      // Filter watch history for videos in this course
+      const courseWatchHistory = student.watchHistory.filter(
+        item => item.video && courseVideoIds.some(id => id.toString() === item.video.toString())
+      );
+      
+      // Calculate total watch time for this course
+      const totalWatchTime = courseWatchHistory.reduce(
+        (total, item) => total + (item.timeSpent || 0), 0
+      );
+      
+      // Calculate video completion metrics
+      const videoCompletions = {};
+      courseWatchHistory.forEach(item => {
+        if (item.video) {
+          videoCompletions[item.video.toString()] = item.timeSpent || 0;
+        }
+      });
+      
+      // Calculate activity metrics - days active, average session length
+      const uniqueDays = new Set();
+      courseWatchHistory.forEach(item => {
+        if (item.lastWatched) {
+          uniqueDays.add(item.lastWatched.toISOString().split('T')[0]);
+        }
+      });
+      
+      studentAnalytics.push({
+        _id: student._id,
+        name: student.name,
+        regNo: student.regNo,
+        email: student.email,
+        totalWatchTime,
+        totalWatchTimeFormatted: formatTime(totalWatchTime),
+        videoCompletions,
+        videosWatched: Object.keys(videoCompletions).length,
+        uniqueDaysActive: uniqueDays.size
+      });
+    }
+    
+    // Sort students by watch time (descending)
+    studentAnalytics.sort((a, b) => b.totalWatchTime - a.totalWatchTime);
+    
+    // Calculate video analytics
+    const videoAnalytics = [];
+    
+    for (const video of course.videos) {
+      // Count students who watched this video
+      const studentsWatched = students.filter(student => 
+        student.watchHistory.some(item => 
+          item.video && item.video.toString() === video._id.toString() && item.timeSpent > 0
+        )
+      ).length;
+      
+      // Calculate total watch time for this video
+      const totalWatchTime = students.reduce((total, student) => {
+        const watchItem = student.watchHistory.find(item => 
+          item.video && item.video.toString() === video._id.toString()
+        );
+        return total + (watchItem ? (watchItem.timeSpent || 0) : 0);
+      }, 0);
+      
+      // Calculate average watch time
+      const avgWatchTime = studentsWatched > 0 ? totalWatchTime / studentsWatched : 0;
+      
+      // Calculate watch percentage (what percentage of students watched this video)
+      const watchPercentage = students.length > 0 ? (studentsWatched / students.length) * 100 : 0;
+      
+      // Calculate completion rate
+      const completionRate = calculateCompletionRate(video, students);
+      
+      videoAnalytics.push({
+        _id: video._id,
+        title: video.title,
+        studentsWatched,
+        totalWatchTime,
+        totalWatchTimeFormatted: formatTime(totalWatchTime),
+        avgWatchTime,
+        avgWatchTimeFormatted: formatTime(avgWatchTime),
+        watchPercentage,
+        completionRate
+      });
+    }
+    
+    // Sort videos by total watch time (descending)
+    videoAnalytics.sort((a, b) => b.totalWatchTime - a.totalWatchTime);
+    
+    // Calculate summary metrics
+    const totalStudents = students.length;
+    const totalVideos = course.videos.length;
+    const totalTeachers = course.teachers.length;
+    
+    // Calculate average watch time across all students and videos
+    const totalWatchTimeAllStudents = studentAnalytics.reduce((total, student) => total + student.totalWatchTime, 0);
+    const avgWatchTime = totalStudents > 0 ? totalWatchTimeAllStudents / totalStudents : 0;
+    
+    // Calculate how many students were active in the last 7 days
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 7);
+    
+    const activeStudentsCount = students.filter(student => 
+      student.watchHistory.some(item => 
+        item.lastWatched && item.lastWatched >= sevenDaysAgo && 
+        courseVideoIds.some(id => id.toString() === (item.video ? item.video.toString() : ''))
+      )
+    ).length;
+    
+    const response = {
+      course: {
+        _id: course._id,
+        title: course.title,
+        courseCode: course.courseCode,
+        description: course.description
+      },
+      summary: {
+        totalStudents,
+        totalVideos,
+        totalTeachers,
+        avgWatchTime,
+        avgWatchTimeFormatted: formatTime(avgWatchTime),
+        activeStudents: activeStudentsCount
+      },
+      videoAnalytics,
+      studentAnalytics
+    };
+    
+    res.json(response);
+  } catch (err) {
+    console.error('Error fetching course analytics:', err);
+    res.status(500).json({ message: 'Failed to load course analytics', error: err.message });
+  }
+};
+
+// Get student by registration number
+exports.getStudentByRegNo = async (req, res) => {
+  try {
+    const { regNo } = req.query;
+    
+    if (!regNo) {
+      return res.status(400).json({ message: 'Registration number is required' });
+    }
+    
+    const student = await User.findOne({ regNo, role: 'student' })
+      .select('name regNo email');
+    
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    
+    res.json(student);
+  } catch (err) {
+    console.error('Error finding student:', err);
+    res.status(500).json({ message: 'Failed to find student' });
+  }
+};
+
+// Get detailed analytics for a specific student
+exports.getStudentDetailedAnalytics = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const teacherId = req.user._id;
+    
+    // Get courses taught by this teacher
+    const teacherCourses = await Course.find({ teachers: teacherId });
+    const teacherCourseIds = teacherCourses.map(course => course._id);
+    
+    // Find the student
+    const student = await User.findById(studentId)
+      .select('name regNo email watchHistory coursesAssigned')
+      .populate({
+        path: 'coursesAssigned',
+        match: { _id: { $in: teacherCourseIds } }, // Only include courses taught by this teacher
+        select: 'title courseCode videos',
+        populate: {
+          path: 'videos',
+          select: 'title duration'
+        }
+      });
+    
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    
+    // Check if student is enrolled in any courses taught by this teacher
+    if (!student.coursesAssigned || student.coursesAssigned.length === 0) {
+      return res.status(403).json({ message: 'Not authorized to view this student\'s analytics' });
+    }
+    
+    // Calculate summary metrics
+    const totalCourses = student.coursesAssigned.length;
+    let totalVideosWatched = 0;
+    let totalWatchTime = 0;
+    
+    // Prepare course analytics
+    const courseAnalytics = [];
+    
+    for (const course of student.coursesAssigned) {
+      // Get video IDs for this course
+      const courseVideoIds = course.videos.map(video => video._id);
+      
+      // Filter watch history for videos in this course
+      const courseWatchHistory = student.watchHistory.filter(item => 
+        item.video && courseVideoIds.some(id => id.toString() === item.video.toString())
+      );
+      
+      // Calculate total watch time for this course
+      const courseTotalWatchTime = courseWatchHistory.reduce(
+        (total, item) => total + (item.timeSpent || 0), 0
+      );
+      
+      // Calculate watched videos count
+      const videosWatched = new Set(
+        courseWatchHistory
+          .filter(item => item.timeSpent > 0)
+          .map(item => item.video.toString())
+      ).size;
+      
+      // Calculate completion percentage
+      const completionPercentage = course.videos.length > 0 
+        ? (videosWatched / course.videos.length) * 100 
+        : 0;
+      
+      // Get last activity date
+      let lastActivity = null;
+      if (courseWatchHistory.length > 0) {
+        lastActivity = courseWatchHistory.reduce((latest, item) => {
+          if (!latest || (item.lastWatched && item.lastWatched > latest)) {
+            return item.lastWatched;
+          }
+          return latest;
+        }, null);
+      }
+      
+      // Collect video details for this course
+      const videoDetails = [];
+      for (const video of course.videos) {
+        const watchRecord = student.watchHistory.find(item => 
+          item.video && item.video.toString() === video._id.toString()
+        );
+        
+        if (watchRecord) {
+          videoDetails.push({
+            videoId: video._id,
+            title: video.title,
+            timeSpent: watchRecord.timeSpent || 0,
+            timeSpentFormatted: formatTime(watchRecord.timeSpent || 0),
+            lastWatched: watchRecord.lastWatched,
+            avgPlaybackSpeed: watchRecord.avgPlaybackSpeed || 1
+          });
+        }
+      }
+      
+      courseAnalytics.push({
+        _id: course._id,
+        title: course.title,
+        courseCode: course.courseCode,
+        totalWatchTime: courseTotalWatchTime,
+        totalWatchTimeFormatted: formatTime(courseTotalWatchTime),
+        videosWatched,
+        totalVideos: course.videos.length,
+        completionPercentage,
+        lastActivity,
+        videoDetails
+      });
+      
+      // Update overall metrics
+      totalVideosWatched += videosWatched;
+      totalWatchTime += courseTotalWatchTime;
+    }
+    
+    // Calculate average watch time per video
+    const averageWatchTime = totalVideosWatched > 0 ? totalWatchTime / totalVideosWatched : 0;
+    
+    // Generate activity heatmap
+    const activityHeatmap = generateActivityHeatmap(student.watchHistory);
+    
+    // Calculate engagement metrics
+    const uniqueDaysActive = new Set();
+    let firstActivity = null;
+    
+    student.watchHistory.forEach(item => {
+      if (item.lastWatched) {
+        uniqueDaysActive.add(item.lastWatched.toISOString().split('T')[0]);
+        
+        if (!firstActivity || item.lastWatched < firstActivity) {
+          firstActivity = item.lastWatched;
+        }
+      }
+    });
+    
+    // Mock data for streak and session length (would be calculated from actual data in a real implementation)
+    const longestStreak = Math.min(uniqueDaysActive.size, Math.floor(Math.random() * 7) + 1);
+    const averageSessionLength = totalWatchTime / uniqueDaysActive.size || 0;
+    
+    const response = {
+      student: {
+        _id: student._id,
+        name: student.name,
+        regNo: student.regNo,
+        email: student.email
+      },
+      summary: {
+        totalCourses,
+        totalVideosWatched,
+        totalWatchTime,
+        totalWatchTimeFormatted: formatTime(totalWatchTime),
+        averageWatchTime,
+        averageWatchTimeFormatted: formatTime(averageWatchTime)
+      },
+      engagementMetrics: {
+        totalDaysActive: uniqueDaysActive.size,
+        firstActivity,
+        longestStreak,
+        averageSessionLength,
+        averageSessionLengthFormatted: formatTime(averageSessionLength)
+      },
+      courseAnalytics,
+      activityHeatmap
+    };
+    
+    res.json(response);
+  } catch (err) {
+    console.error('Error retrieving student analytics:', err);
+    res.status(500).json({ message: 'Failed to retrieve student analytics', error: err.message });
+  }
+};
+
+// Helper function to format time in human-readable format
+function formatTime(seconds) {
+  if (seconds === undefined || seconds === null) return '0s';
+  
+  // Convert to number if it's a string
+  const secondsNum = typeof seconds === 'string' ? parseFloat(seconds) : seconds;
+  
+  // Handle very small values (less than 1 second)
+  if (secondsNum < 1 && secondsNum > 0) {
+    // Display one decimal place for values less than 1 second
+    return `${secondsNum.toFixed(1)}s`;
+  }
+  
+  // Handle zero case
+  if (secondsNum === 0) return '0s';
+  
+  const hours = Math.floor(secondsNum / 3600);
+  const minutes = Math.floor((secondsNum % 3600) / 60);
+  const remainingSeconds = Math.floor(secondsNum % 60);
+  
+  let result = '';
+  if (hours > 0) result += `${hours}h `;
+  if (minutes > 0) result += `${minutes}m `;
+  if (remainingSeconds > 0 || result === '') result += `${remainingSeconds}s`;
+  
+  return result.trim();
+}
+
+// Helper function to calculate video completion rate
+function calculateCompletionRate(video, students) {
+  // If no video duration available, we can't calculate
+  if (!video.duration) return 0;
+  
+  // Get total watch time across all students
+  let watchTimeSum = 0;
+  let studentsWatched = 0;
+  
+  students.forEach(student => {
+    const watchItem = student.watchHistory.find(item => 
+      item.video && item.video.toString() === video._id.toString()
+    );
+    
+    if (watchItem && watchItem.timeSpent) {
+      watchTimeSum += watchItem.timeSpent;
+      studentsWatched++;
+    }
+  });
+  
+  // Calculate average watch time as percentage of video duration
+  if (studentsWatched === 0) return 0;
+  
+  const avgWatchTime = watchTimeSum / studentsWatched;
+  const completionRate = Math.min(100, (avgWatchTime / (video.duration * 60)) * 100);
+  
+  return Math.round(completionRate);
+}
+
+// Helper function to generate activity heatmap
+function generateActivityHeatmap(watchHistory) {
+  const heatmap = {
+    byDay: {},
+    byHour: {},
+    byDayHour: {}
+  };
+  
+  // Initialize days
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  days.forEach(day => {
+    heatmap.byDay[day] = 0;
+  });
+  
+  // Initialize hours
+  for (let i = 0; i < 24; i++) {
+    heatmap.byHour[i] = 0;
+  }
+  
+  // Initialize day-hour combinations
+  days.forEach(day => {
+    heatmap.byDayHour[day] = {};
+    for (let i = 0; i < 24; i++) {
+      heatmap.byDayHour[day][i] = 0;
+    }
+  });
+  
+  // Process watch history
+  watchHistory.forEach(item => {
+    if (item.lastWatched && item.timeSpent) {
+      const date = new Date(item.lastWatched);
+      const day = days[date.getDay()];
+      const hour = date.getHours();
+      
+      heatmap.byDay[day] += item.timeSpent;
+      heatmap.byHour[hour] += item.timeSpent;
+      heatmap.byDayHour[day][hour] += item.timeSpent;
+    }
+  });
+  
+  return heatmap;
+}

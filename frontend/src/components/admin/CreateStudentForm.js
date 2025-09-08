@@ -1,0 +1,279 @@
+import React, { useState } from 'react';
+import { 
+  Box, 
+  Typography, 
+  TextField, 
+  Button, 
+  Paper, 
+  Grid, 
+  Alert,
+  FormHelperText,
+  InputAdornment,
+  Autocomplete,
+  Chip
+} from '@mui/material';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import { createStudent } from '../../api/studentApi';
+
+const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+const CreateStudentForm = ({ onStudentCreated }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    regNo: '',
+    coursesAssigned: []
+  });
+  
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [success, setSuccess] = useState('');
+  const [touched, setTouched] = useState({});
+  const token = localStorage.getItem('token');
+
+  const validateField = (name, value) => {
+    switch (name) {
+      case 'name':
+        return value.trim() === '' ? 'Name is required' : '';
+      case 'email':
+        return value.trim() === '' 
+          ? 'Email is required' 
+          : !emailRegex.test(value) 
+            ? 'Invalid email format' 
+            : '';
+      case 'password':
+        return value.trim() === '' 
+          ? 'Password is required' 
+          : value.length < 6 
+            ? 'Password must be at least 6 characters' 
+            : '';
+      case 'regNo':
+        // RegNo is optional, as it will be auto-generated if not provided
+        if (value.trim() === '') return '';
+        return /^S\d{6}$/.test(value) 
+          ? '' 
+          : 'Registration number should start with S followed by 6 digits';
+      default:
+        return '';
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    Object.keys(formData).forEach(key => {
+      if (key === 'coursesAssigned') return; // Skip validation for courses
+      const error = validateField(key, formData[key]);
+      if (error) newErrors[key] = error;
+    });
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+    setTouched({ ...touched, [name]: true });
+    
+    if (touched[name]) {
+      const error = validateField(name, value);
+      setErrors({ ...errors, [name]: error });
+    }
+  };
+
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    setTouched({ ...touched, [name]: true });
+    const error = validateField(name, value);
+    setErrors({ ...errors, [name]: error });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSuccess('');
+    
+    if (!validateForm()) {
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const response = await createStudent(formData, token);
+      setSuccess('Student created successfully!');
+      resetForm();
+      if (onStudentCreated) {
+        onStudentCreated(response);
+      }
+    } catch (error) {
+      setErrors({ 
+        submit: error.response?.data?.message || 'Failed to create student. Please try again.' 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      email: '',
+      password: '',
+      regNo: '',
+      coursesAssigned: []
+    });
+    setErrors({});
+    setTouched({});
+  };
+
+  return (
+    <Paper 
+      sx={{ 
+        p: 3, 
+        mb: 3, 
+        border: '1px solid #e0e0e0',
+        borderRadius: 2,
+        boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <PersonAddIcon sx={{ mr: 1, color: 'primary.main' }} />
+        <Typography variant="h6" component="h2">
+          Create New Student
+        </Typography>
+      </Box>
+      
+      {success && (
+        <Alert 
+          severity="success" 
+          sx={{ mb: 2 }}
+          onClose={() => setSuccess('')}
+        >
+          {success}
+        </Alert>
+      )}
+      
+      {errors.submit && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 2 }}
+          onClose={() => setErrors({ ...errors, submit: '' })}
+        >
+          {errors.submit}
+        </Alert>
+      )}
+      
+      <Box component="form" onSubmit={handleSubmit}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              name="name"
+              label="Full Name"
+              value={formData.name}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              fullWidth
+              required
+              error={touched.name && !!errors.name}
+              helperText={touched.name && errors.name}
+              disabled={loading}
+              margin="normal"
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              name="email"
+              label="Email"
+              type="email"
+              value={formData.email}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              fullWidth
+              required
+              error={touched.email && !!errors.email}
+              helperText={touched.email && errors.email}
+              disabled={loading}
+              margin="normal"
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              name="password"
+              label="Password"
+              type="password"
+              value={formData.password}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              fullWidth
+              required
+              error={touched.password && !!errors.password}
+              helperText={touched.password && errors.password}
+              disabled={loading}
+              margin="normal"
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              name="regNo"
+              label="Registration Number (Optional)"
+              value={formData.regNo}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              fullWidth
+              error={touched.regNo && !!errors.regNo}
+              helperText={
+                touched.regNo && errors.regNo ? 
+                errors.regNo : 
+                "If left empty, a registration number will be automatically assigned"
+              }
+              disabled={loading}
+              margin="normal"
+              InputProps={{
+                startAdornment: <InputAdornment position="start">S</InputAdornment>,
+              }}
+              placeholder="123456"
+            />
+          </Grid>
+          
+          <Grid item xs={12}>
+            <FormHelperText sx={{ mb: 1 }}>
+              When creating a student:
+            </FormHelperText>
+            <FormHelperText sx={{ mb: 0.5 }}>
+              • If you leave the registration number empty, the system will generate one starting with "S" followed by 6 digits
+            </FormHelperText>
+            <FormHelperText sx={{ mb: 0.5 }}>
+              • If you provide a registration number, make sure it starts with "S" followed by 6 digits
+            </FormHelperText>
+            <FormHelperText sx={{ mb: 0.5 }}>
+              • Courses can be assigned to students after creation
+            </FormHelperText>
+          </Grid>
+          
+          <Grid item xs={12} sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button 
+              variant="outlined" 
+              onClick={resetForm}
+              disabled={loading}
+              sx={{ mr: 1 }}
+            >
+              Reset
+            </Button>
+            <Button 
+              type="submit" 
+              variant="contained" 
+              disabled={loading}
+            >
+              Create Student
+            </Button>
+          </Grid>
+        </Grid>
+      </Box>
+    </Paper>
+  );
+};
+
+export default CreateStudentForm;
