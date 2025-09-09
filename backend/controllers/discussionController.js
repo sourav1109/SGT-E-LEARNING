@@ -3,6 +3,7 @@ const Course = require('../models/Course');
 const User = require('../models/User');
 const path = require('path');
 const fs = require('fs');
+const Notification = require('../models/Notification');
 
 // Get all discussions for admin
 exports.getAllDiscussions = async (req, res) => {
@@ -125,6 +126,43 @@ exports.createDiscussion = async (req, res) => {
     const populatedDiscussion = await Discussion.findById(discussion._id)
       .populate('user', 'name role')
       .populate('course', 'title courseCode');
+
+    // Notify course participants (students assigned to course + course teachers + admins) excluding author
+    try {
+      const courseParticipants = new Set();
+      // Teachers
+      if (course.teachers) course.teachers.forEach(t => courseParticipants.add(t.toString()));
+      // Students assigned (find users whose coursesAssigned includes courseId)
+      const students = await User.find({ role: 'student', coursesAssigned: courseId }, '_id');
+      students.forEach(s => courseParticipants.add(s._id.toString()));
+      // Admins
+      const admins = await User.find({ role: 'admin' }, '_id');
+      admins.forEach(a => courseParticipants.add(a._id.toString()));
+      courseParticipants.delete(req.user._id.toString());
+      const bulk = [];
+      for (const uid of courseParticipants) {
+        bulk.push({
+          updateOne: {
+            filter: { recipient: uid, discussion: discussion._id, type: 'discussion_new' },
+            update: {
+              $setOnInsert: {
+                type: 'discussion_new',
+                recipient: uid,
+                message: `New discussion: ${title}`,
+                discussion: discussion._id,
+                data: { discussionId: discussion._id, courseId },
+                read: false,
+                createdAt: new Date()
+              }
+            },
+            upsert: true
+          }
+        });
+      }
+      if (bulk.length) await Notification.bulkWrite(bulk);
+    } catch (notifyErr) {
+      console.error('Notification error (createDiscussion):', notifyErr.message);
+    }
     
     res.status(201).json({
       message: 'Discussion created successfully',
@@ -309,6 +347,41 @@ exports.addReply = async (req, res) => {
     
     // Get the newly added reply
     const newReply = updatedDiscussion.replies[updatedDiscussion.replies.length - 1];
+
+    // Notify original poster (and teachers/admins) about new reply (exclude replier)
+    try {
+      const recipients = new Set();
+      // Original poster
+      recipients.add(updatedDiscussion.user._id.toString());
+      // Course teachers
+      if (updatedDiscussion.course && updatedDiscussion.course.teachers) {
+        updatedDiscussion.course.teachers.forEach(t => recipients.add(t.toString()));
+      }
+      // Admins
+      const admins = await User.find({ role: 'admin' }, '_id');
+      admins.forEach(a => recipients.add(a._id.toString()));
+      recipients.delete(req.user._id.toString());
+      const bulk = [];
+      for (const uid of recipients) {
+        bulk.push({
+          insertOne: {
+            document: {
+              type: 'discussion_reply',
+              recipient: uid,
+              message: `New reply in: ${updatedDiscussion.title || 'discussion'}`,
+              discussion: updatedDiscussion._id,
+              replyId: newReply._id,
+              data: { discussionId: updatedDiscussion._id, replyId: newReply._id, courseId: updatedDiscussion.course?._id },
+              read: false,
+              createdAt: new Date()
+            }
+          }
+        });
+      }
+      if (bulk.length) await Notification.bulkWrite(bulk);
+    } catch (notifyErr) {
+      console.error('Notification error (addReply):', notifyErr.message);
+    }
     
     res.status(201).json({
       message: 'Reply added successfully',

@@ -33,7 +33,36 @@ const theme = createTheme({
   },
 });
 
+import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 function App() {
+  const navigate = useNavigate();
+  const timerRef = useRef();
+  const INACTIVITY_LIMIT = 300000; // 5 minutes in ms
+
+  // Reset inactivity timer
+  const resetTimer = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      // Clear session (localStorage, etc.)
+      localStorage.removeItem('token');
+      // You may want to clear other session data here
+      navigate('/login');
+    }, INACTIVITY_LIMIT);
+  };
+
+  useEffect(() => {
+    // List of events to consider as activity
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
+    events.forEach(event => window.addEventListener(event, resetTimer));
+    resetTimer(); // Start timer on mount
+    return () => {
+      events.forEach(event => window.removeEventListener(event, resetTimer));
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />

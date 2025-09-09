@@ -34,6 +34,7 @@ import { parseJwt } from '../utils/jwt';
 import { logoutUser } from '../utils/authService';
 import Sidebar from '../components/Sidebar';
 import NotificationBell from '../components/admin/NotificationBell';
+import AnnouncementPage from './AnnouncementPage';
 import AnalyticsDashboard from './admin/AnalyticsDashboard';
 import EnhancedAnalytics from './admin/EnhancedAnalytics';
 import TeacherManagement from './admin/TeacherManagement';
@@ -360,6 +361,7 @@ const AdminDashboard = () => {
             <Route path="courses" element={<CourseManagement currentUser={currentUser} />} />
             <Route path="enhanced-analytics" element={<EnhancedAnalytics />} />
             <Route path="forum/*" element={<ForumModeration currentUser={currentUser} />} />
+            <Route path="announcements" element={<AnnouncementPage role="admin" />} />
             {currentUser?.role === 'admin' && <Route path="roles" element={<RoleManagement />} />}
             <Route path="*" element={<Navigate to="/admin/dashboard" />} />
           </Routes>

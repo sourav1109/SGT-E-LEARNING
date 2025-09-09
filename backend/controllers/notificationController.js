@@ -1,12 +1,37 @@
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 
-// Fetch notifications for current admin
+// Fetch notifications for current user (any role)
 exports.getNotifications = async (req, res) => {
   try {
-    const notifications = await Notification.find({ recipient: req.user._id }).sort({ createdAt: -1 }).limit(100);
-    res.json(notifications);
+    // Debug: trace incoming user
+    if (!req.user) {
+      console.warn('getNotifications: req.user missing');
+    }
+    const { page = 1, limit = 50 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const query = { recipient: req.user._id };
+    const [items, total] = await Promise.all([
+      Notification.find(query).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+      Notification.countDocuments(query)
+    ]);
+    // Debug counts
+    console.log(`Notifications fetched for user ${req.user?._id}: ${items.length}/${total}`);
+    res.json({ notifications: items, total, page: parseInt(page) });
   } catch (err) {
+    console.error('getNotifications error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Unread count for badge/blink
+exports.getUnreadCount = async (req, res) => {
+  try {
+    const count = await Notification.countDocuments({ recipient: req.user._id, read: false });
+  console.log(`Unread count for user ${req.user?._id}: ${count}`);
+    res.json({ unread: count });
+  } catch (err) {
+  console.error('getUnreadCount error:', err.message);
     res.status(500).json({ error: err.message });
   }
 };
@@ -14,16 +39,31 @@ exports.getNotifications = async (req, res) => {
 // Mark notification as read
 exports.markAsRead = async (req, res) => {
   try {
-    await Notification.findByIdAndUpdate(req.params.id, { read: true });
-    res.json({ message: 'Marked as read' });
+    const notif = await Notification.findOneAndUpdate({ _id: req.params.id, recipient: req.user._id }, { read: true });
+    if (!notif) return res.status(404).json({ message: 'Notification not found' });
+  console.log(`Notification ${req.params.id} marked read by user ${req.user?._id}`);
+    res.json({ message: 'Marked as read', id: req.params.id });
   } catch (err) {
+  console.error('markAsRead error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Mark all notifications for current user as read
+exports.markAllRead = async (req, res) => {
+  try {
+    await Notification.updateMany({ recipient: req.user._id, read: false }, { $set: { read: true } });
+  console.log(`All notifications marked read for user ${req.user?._id}`);
+    res.json({ message: 'All notifications marked as read' });
+  } catch (err) {
+  console.error('markAllRead error:', err.message);
     res.status(500).json({ error: err.message });
   }
 };
 
 // Create notification (utility)
-exports.createNotification = async ({ type, recipient, message, data }) => {
-  await Notification.create({ type, recipient, message, data });
+exports.createNotification = async ({ type, recipient, message, data, announcement, discussion, replyId }) => {
+  await Notification.create({ type, recipient, message, data, announcement, discussion, replyId });
 };
 
 // Generate inactivity notifications (to be run as a scheduled job)

@@ -17,10 +17,26 @@ export const createStudent = async (studentData, token) => {
 export const bulkUploadStudents = async (file, token) => {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await axios.post('/api/admin/student/bulk', formData, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  return res.data;
+  try {
+    const res = await axios.post('/api/admin/student/bulk', formData, {
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json'
+        // Do NOT set Content-Type manually; let the browser include boundary
+      }
+    });
+    return res.data;
+  } catch (err) {
+    if (err.response) {
+      console.error('Bulk upload failed:', err.response.status, err.response.data);
+  // Re-throw preserving response so UI can access row errors & status (including 400/500)
+  const e = new Error(err.response.data?.message || 'Bulk upload failed');
+  e.response = err.response;
+  throw e;
+    }
+    console.error('Bulk upload network/error:', err.message);
+    throw err;
+  }
 };
 
 export const assignCourseToStudent = async (regNo, courseId, token) => {
