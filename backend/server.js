@@ -24,6 +24,7 @@ const studentRoutes = require('./routes/student');
 const teacherRoutes = require('./routes/teacher');
 const discussionRoutes = require('./routes/discussion');
 const centralizedDiscussionRoutes = require('./routes/discussionRoutes');
+const announcementRoutes = require('./routes/announcement');
 
 app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
@@ -33,6 +34,7 @@ app.use('/api/student', studentRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/discussions', discussionRoutes); // Legacy discussion route
 app.use('/api/forums', centralizedDiscussionRoutes); // New centralized forum system
+app.use('/api/announcement', announcementRoutes); // Generic announcement route
 
 // Connect to MongoDB using only the .env file configuration
 mongoose.connect(process.env.MONGO_URI)

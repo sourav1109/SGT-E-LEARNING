@@ -77,9 +77,15 @@ const StudentManagement = () => {
   };
 
   const handleBulkUpload = async (file) => {
-    await bulkUploadStudents(file, token);
-    setSnackbar('Bulk upload successful');
-    fetchStudents();
+    try {
+      const result = await bulkUploadStudents(file, token);
+      setSnackbar('Bulk upload completed');
+      fetchStudents();
+      return result; // Return the result so BulkUploadStudents can access it
+    } catch (error) {
+      console.error('Bulk upload error:', error);
+      throw error; // Re-throw so BulkUploadStudents can handle the error
+    }
   };
 
   const handleCreateStudent = async (studentData) => {

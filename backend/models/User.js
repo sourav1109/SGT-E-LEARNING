@@ -22,6 +22,7 @@ const userSchema = new mongoose.Schema({
     currentPosition: { type: Number, default: 0 } // Current playback position in seconds
   }],
   isActive: { type: Boolean, default: true },
+  canAnnounce: { type: Boolean, default: false }, // Allow teacher to post announcements
   emailVerified: { type: Boolean, default: false },
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date }

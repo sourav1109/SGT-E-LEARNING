@@ -58,6 +58,12 @@ router.get('/course/:courseId/videos', teacherController.getCourseVideos);
 // Upload a video for a course
 router.post('/course/:courseId/video', upload.single('video'), teacherController.uploadCourseVideo);
 
+// Teacher: Create announcement for students in assigned course
+router.post('/course/:courseId/announcement', teacherController.createCourseAnnouncement);
+
+// Get announcements for teacher
+router.get('/announcement', require('../controllers/announcementController').getAnnouncements);
+
 // Request video removal
 router.post('/video/:videoId/removal-request', teacherController.requestVideoRemoval);
 

@@ -3,7 +3,8 @@ import { Box, Button, Alert, Typography, Table, TableBody, TableCell, TableConta
 import Papa from 'papaparse';
 import DownloadIcon from '@mui/icons-material/Download';
 
-const REQUIRED_FIELDS = ['name', 'email', 'password'];
+// Backend now only strictly requires name & email; password becomes optional (auto-generated if missing)
+const REQUIRED_FIELDS = ['name', 'email'];
 const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 // Helper function to generate sample CSV content
@@ -30,7 +31,9 @@ const BulkUploadStudents = ({ onUpload }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [preview, setPreview] = useState([]);
-  const [csvErrors, setCsvErrors] = useState([]);
+  const [csvErrors, setCsvErrors] = useState([]); // client-side pre-validation errors
+  const [serverErrors, setServerErrors] = useState([]); // row-level errors returned by server
+  const [serverResults, setServerResults] = useState([]); // successful rows with possible generated passwords
 
   const handleFileChange = e => {
     setFile(e.target.files[0]);
@@ -42,6 +45,7 @@ const BulkUploadStudents = ({ onUpload }) => {
       Papa.parse(e.target.files[0], {
         header: true,
         skipEmptyLines: true,
+        delimiter: '', // Auto-detect delimiter (comma, tab, etc.)
         transformHeader: header => header.trim().toLowerCase(), // Normalize headers
         complete: (results) => {
           const rows = results.data;
@@ -65,6 +69,7 @@ const BulkUploadStudents = ({ onUpload }) => {
               normalizedRow[key.toLowerCase().trim()] = row[key];
             });
             
+            // Required fields (password optional now)
             REQUIRED_FIELDS.forEach(f => {
               if (!normalizedRow[f] || normalizedRow[f].trim() === '') {
                 errors.push({ row: idx + 2, message: `Missing field: ${f}` });
@@ -97,31 +102,40 @@ const BulkUploadStudents = ({ onUpload }) => {
     if (!file) return setError('Please select a CSV file');
     if (csvErrors.length > 0) return setError('Please fix CSV errors before uploading.');
     try {
-      await onUpload(file);
-      setSuccess('Students uploaded successfully');
+      const data = await onUpload(file);
+      setServerErrors([]);
+      setServerResults(data.results || []);
+      if (data.failed && data.failed > 0) {
+        setSuccess(`Uploaded ${data.success} students, ${data.failed} failed.`);
+        setServerErrors(data.errors || []);
+      } else {
+        setSuccess(`Uploaded ${data.success || data.total || 0} students successfully.`);
+      }
       setFile(null);
       setPreview([]);
       setCsvErrors([]);
     } catch (err) {
-      setError(err.response?.data?.message || 'Bulk upload failed');
-      if (err.response?.data?.errors) {
-        setCsvErrors(err.response.data.errors);
-      }
+      setSuccess('');
+      const resp = err.response?.data;
+      setError(resp?.message || err.message || 'Bulk upload failed');
+      if (resp?.errors) setServerErrors(resp.errors);
+      else setServerErrors([]);
+      setServerResults([]);
     }
   };
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ mb: 2 }}>
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-      {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+  {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+  {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
       
       <Alert severity="info" sx={{ mb: 2 }}>
         <Typography variant="body2">
-          Upload a CSV file with the following required columns: 
-          <strong>name</strong>, <strong>email</strong>, <strong>password</strong>.
-          Optional columns: <strong>regNo</strong>, <strong>courseAssigned</strong>.
+          Upload a CSV file with required columns: <strong>name</strong>, <strong>email</strong>.
+          Optional columns: <strong>password</strong> (auto-generated if blank), <strong>regNo</strong> (auto-generated if blank), <strong>courseAssigned</strong> (single or multiple; use comma / semicolon or ["C000001","C000002"]).
           <br />
           <strong>Note:</strong> If you don't provide a registration number (regNo), the system will automatically generate one starting with "S" followed by 6 digits.
+          <br />If password is omitted a secure random password will be generated and shown below after upload (copy & distribute securely).
           <br />
           <Link 
             component="button" 
@@ -171,14 +185,54 @@ const BulkUploadStudents = ({ onUpload }) => {
               </TableBody>
             </Table>
           </TableContainer>
-          {csvErrors.length > 0 && (
+          {(csvErrors.length > 0) && (
             <Alert severity="error" sx={{ mt: 2 }}>
-              <b>CSV Errors:</b>
+              <b>Local CSV Validation Errors:</b>
               <ul style={{ margin: 0 }}>
                 {csvErrors.map((e, i) => <li key={i}>Row {e.row}: {e.message}</li>)}
               </ul>
             </Alert>
           )}
+        </Box>
+      )}
+
+      {serverErrors.length > 0 && (
+        <Alert severity="warning" sx={{ mt: 2 }}>
+          <b>Server Reported Row Errors:</b>
+          <ul style={{ margin: 0 }}>
+            {serverErrors.map((e, i) => <li key={i}>Row {e.row}: {e.message}</li>)}
+          </ul>
+        </Alert>
+      )}
+
+      {serverResults.length > 0 && (
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>Uploaded Students Summary</Typography>
+          <TableContainer component={Paper}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>CSV Row</TableCell>
+                  <TableCell>Reg No</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Generated Password</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {serverResults.map((r,i) => (
+                  <TableRow key={i}>
+                    <TableCell>{r.row}</TableCell>
+                    <TableCell>{r.regNo}</TableCell>
+                    <TableCell>{r.email}</TableCell>
+                    <TableCell style={{ fontFamily: 'monospace' }}>{r.generatedPassword || ''}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            Distribute generated passwords securely; advise users to change them after first login.
+          </Typography>
         </Box>
       )}
     </Box>
