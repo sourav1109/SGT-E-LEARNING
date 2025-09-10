@@ -17,8 +17,7 @@ import TeacherCourses from './teacher/TeacherCourses';
 import TeacherCourseDetail from './teacher/TeacherCourseDetail';
 import TeacherVideos from './teacher/TeacherVideos';
 import TeacherStudents from './teacher/TeacherStudents';
-import TeacherForums from './teacher/TeacherForums';
-import TeacherForumDetail from './teacher/TeacherForumDetail';
+// ...existing code...
 import TeacherAnalytics from './teacher/TeacherAnalytics';
 import UnauthorizedPage from './UnauthorizedPage';
 
@@ -194,8 +193,7 @@ const TeacherDashboard = () => {
           <Route path="/course/:courseId" element={<TeacherCourseDetail />} />
           <Route path="/videos" element={<PermissionRoute element={<TeacherVideos />} permission="manage_videos" />} />
           <Route path="/students" element={<PermissionRoute element={<TeacherStudents />} permission="manage_students" />} />
-          <Route path="/forums" element={<TeacherForums />} />
-          <Route path="/forum/:forumId" element={<TeacherForumDetail />} />
+          {/* Forum routes removed */}
           <Route path="/announcements" element={<AnnouncementPage role="teacher" teacherCourses={[]} userId={currentUser?._id} />} />
           {/* Redirecting student-analytics to the main analytics dashboard */}
           <Route path="/student-analytics" element={<Navigate to="/analytics" replace />} />

@@ -33,7 +33,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import * as forumApi from '../../api/forumApi';
+// ...existing code...
 
 const TeacherForums = () => {
   const navigate = useNavigate();

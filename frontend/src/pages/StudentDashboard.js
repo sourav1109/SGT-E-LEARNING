@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Paper, Typography, Box, Button, List, ListItem, ListItemText, IconButton, Menu, MenuItem, Tooltip, Badge } from '@mui/material';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Typography, Box, IconButton, Menu, MenuItem, Tooltip, Badge } from '@mui/material';
 import axios from 'axios';
 import LogoutIcon from '@mui/icons-material/Logout';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
@@ -17,13 +17,13 @@ import StudentCourseVideos from './student/StudentCourseVideos';
 import StudentCourseProgress from './student/StudentCourseProgress';
 import StudentForumPage from './student/StudentForumPage';
 import StudentForumDetailPage from './student/StudentForumDetailPage';
-import StudentUnansweredForumsPage from './student/StudentUnansweredForumsPage';
+
 
 const StudentDashboard = () => {
   const token = localStorage.getItem('token');
   const currentUser = parseJwt(token);
   const navigate = useNavigate();
-  const location = useLocation();
+  // const location = useLocation();
   const [userMenuAnchor, setUserMenuAnchor] = useState(null);
   const [notifAnchor, setNotifAnchor] = useState(null);
   const [notifications, setNotifications] = useState([]);
@@ -180,7 +180,7 @@ const StudentDashboard = () => {
           <Route path="/course/:courseId/progress" element={<StudentCourseProgress />} />
           <Route path="/forums" element={<StudentForumPage />} />
           <Route path="/forum/:forumId" element={<StudentForumDetailPage />} />
-          <Route path="/unanswered-forums" element={<StudentUnansweredForumsPage />} />
+
           <Route path="/announcements" element={<AnnouncementPage role="student" />} />
           <Route path="*" element={<Navigate to="/student/dashboard" replace />} />
         </Routes>
