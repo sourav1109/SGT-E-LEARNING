@@ -29,9 +29,9 @@ const quizPoolRoutes = require('./routes/quizPool');
 const unitRoutes = require('./routes/unit');
 const readingMaterialRoutes = require('./routes/readingMaterial');
 const teacherRequestRoutes = require('./routes/teacherRequest');
-
 const studentQuizAttemptRoutes = require('./routes/studentQuizAttempt');
 const unitQuizRoutes = require('./routes/unitQuiz');
+const announcementRoutes = require('./routes/announcement');
 
 app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
@@ -47,12 +47,12 @@ app.use('/api/unit', unitRoutes); // Unit routes (mounted at /api/unit)
 app.use('/api/units', unitRoutes); // Unit routes (also mounted at /api/units for backwards compatibility)
 app.use('/api/reading-materials', readingMaterialRoutes); // Reading material routes
 app.use('/api/teacher-requests', teacherRequestRoutes);
-
 app.use('/api/student', studentQuizAttemptRoutes); // Student quiz attempt routes (delete incomplete)
 app.use('/api/student', unitQuizRoutes); // Unit quiz routes for students
+app.use('/api/announcement', announcementRoutes); // Generic announcement route
 
 // Connect to MongoDB using only the .env file configuration
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('MongoDB Connected Successfully');
     

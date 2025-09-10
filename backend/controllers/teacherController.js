@@ -201,6 +201,51 @@ exports.uploadCourseVideo = async (req, res) => {
   }
 };
 
+  // Teacher: Create announcement for students in assigned course
+  const Announcement = require('../models/Announcement');
+  exports.createCourseAnnouncement = async (req, res) => {
+    try {
+      // Only allow if teacher has permission
+      if (!req.user.canAnnounce) {
+        return res.status(403).json({ message: 'Not allowed to post announcements.' });
+      }
+      const { courseId } = req.params;
+      const { message } = req.body;
+      if (!message) {
+        return res.status(400).json({ message: 'Message is required.' });
+      }
+      // Verify teacher is assigned to this course
+      const course = await Course.findOne({ _id: courseId, teachers: req.user._id });
+      if (!course) {
+        return res.status(403).json({ message: 'Not authorized for this course.' });
+      }
+      const announcement = new Announcement({
+        sender: req.user._id,
+        role: 'teacher',
+        message,
+        recipients: ['student'],
+        course: courseId,
+      });
+      await announcement.save();
+
+      // Send notifications to students in the course
+      const NotificationController = require('./notificationController');
+      const students = await User.find({ role: 'student', coursesAssigned: courseId, isActive: true });
+      for (const student of students) {
+        await NotificationController.createNotification({
+          type: 'announcement',
+          recipient: student._id,
+          message: `New course announcement: ${message}`,
+          data: { announcementId: announcement._id, courseId },
+          announcement: announcement._id
+        });
+      }
+      res.json({ message: 'Announcement posted successfully.' });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  };
+
 // Request video removal
 exports.requestVideoRemoval = async (req, res) => {
   try {

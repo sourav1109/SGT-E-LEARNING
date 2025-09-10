@@ -33,6 +33,7 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import QuizIcon from '@mui/icons-material/Quiz';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { hasPermission } from '../utils/permissions';
 
@@ -55,7 +56,8 @@ const Sidebar = ({ currentUser }) => {
   
   // Different menus based on user role
   const adminMenu = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard', color: '#4361ee' },
+  { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard', color: '#4361ee' },
+  { text: 'Announcements', icon: <NotificationsActiveIcon />, path: 'announcements', color: '#1976d2' },
     { text: 'Teachers', icon: <PeopleIcon />, path: 'teachers', color: '#3a0ca3' },
     { text: 'Students', icon: <SchoolIcon />, path: 'students', color: '#7209b7' },
     { text: 'Courses', icon: <MdClass />, path: 'courses', color: '#f72585' },
@@ -75,7 +77,8 @@ const Sidebar = ({ currentUser }) => {
   ];
   
   const teacherMenu = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard', permission: null, color: '#4361ee' },
+  { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard', permission: null, color: '#4361ee' },
+  { text: 'Announcements', icon: <NotificationsActiveIcon />, path: 'announcements', permission: null, color: '#1976d2' },
     { text: 'My Courses', icon: <MdClass />, path: 'courses', permission: null, color: '#f72585' },
     { text: 'Quizzes', icon: <QuizIcon />, path: 'quizzes', permission: null, color: '#e91e63' },
     { text: 'Videos', icon: <VideoLibraryIcon />, path: 'videos', permission: 'manage_videos', color: '#7209b7' },
@@ -99,7 +102,8 @@ const Sidebar = ({ currentUser }) => {
   ];
   
   const studentMenu = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard', color: '#4361ee' },
+  { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard', color: '#4361ee' },
+  { text: 'Announcements', icon: <NotificationsActiveIcon />, path: 'announcements', color: '#1976d2' },
     { text: 'My Courses', icon: <MdClass />, path: 'courses', color: '#f72585' },
     { text: 'Videos', icon: <VideoLibraryIcon />, path: 'videos', color: '#7209b7' },
     { text: 'Forums', icon: <ForumIcon />, path: 'forums', color: '#ff9e00' },

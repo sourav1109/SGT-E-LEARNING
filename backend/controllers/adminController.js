@@ -4,6 +4,7 @@ const Notification = require('../models/Notification');
 const fs = require('fs');
 const csv = require('csv-parser');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 
 // POST /api/admin/bulk-message
 exports.bulkMessage = async (req, res) => {
@@ -121,6 +122,143 @@ exports.getAllTeachers = async (req, res) => {
   }
 };
 
+  // Super admin: Create announcement for teachers and/or students
+  const Announcement = require('../models/Announcement');
+  exports.createAnnouncement = async (req, res) => {
+    try {
+      const { message, recipients } = req.body; // recipients: ['teacher', 'student']
+      if (!message || !recipients || !Array.isArray(recipients) || recipients.length === 0) {
+        return res.status(400).json({ message: 'Message and recipients are required.' });
+      }
+      const announcement = new Announcement({
+        sender: req.user._id,
+        role: 'admin',
+        message,
+        recipients,
+      });
+      await announcement.save();
+
+      // Send notifications to recipients
+      const NotificationController = require('./notificationController');
+      let users = [];
+      if (recipients.includes('teacher')) {
+        users = users.concat(await User.find({ role: 'teacher', isActive: true }));
+      }
+      if (recipients.includes('student')) {
+        users = users.concat(await User.find({ role: 'student', isActive: true }));
+      }
+      for (const user of users) {
+        await NotificationController.createNotification({
+          type: 'announcement',
+          recipient: user._id,
+          message: `New announcement: ${message}`,
+          data: { announcementId: announcement._id },
+          announcement: announcement._id
+        });
+      }
+      res.json({ message: 'Announcement created successfully.' });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  };
+
+  // Update announcement
+  exports.updateAnnouncement = async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { message, recipients } = req.body;
+      
+      if (!message || !recipients || !Array.isArray(recipients) || recipients.length === 0) {
+        return res.status(400).json({ message: 'Message and recipients are required.' });
+      }
+      
+      const announcement = await Announcement.findById(id);
+      if (!announcement) {
+        return res.status(404).json({ message: 'Announcement not found.' });
+      }
+      
+      // Store previous values for edit history
+      const previousMessage = announcement.message;
+      const previousRecipients = [...announcement.recipients];
+      
+      // Update announcement
+      announcement.message = message;
+      announcement.recipients = recipients;
+      announcement.isEdited = true;
+      announcement.lastEditedBy = req.user._id;
+      announcement.lastEditedAt = new Date();
+      
+      // Add to edit history
+      announcement.editHistory = announcement.editHistory || [];
+      announcement.editHistory.push({
+        editedBy: req.user._id,
+        editedAt: new Date(),
+        previousMessage: previousMessage,
+        previousRecipients: previousRecipients
+      });
+      
+      await announcement.save();
+      
+      // Create audit log
+      const AuditLog = require('../models/AuditLog');
+      await AuditLog.create({
+        action: 'edit_announcement',
+        performedBy: req.user._id,
+        details: { announcementId: id, message, recipients }
+      });
+      
+      res.json({ message: 'Announcement updated successfully.' });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  };
+  
+  // Delete announcement
+  exports.deleteAnnouncement = async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const announcement = await Announcement.findById(id);
+      if (!announcement) {
+        return res.status(404).json({ message: 'Announcement not found.' });
+      }
+      
+      await Announcement.findByIdAndDelete(id);
+      
+      // Create audit log
+      const AuditLog = require('../models/AuditLog');
+      await AuditLog.create({
+        action: 'delete_announcement',
+        performedBy: req.user._id,
+        details: { announcementId: id }
+      });
+      
+      res.json({ message: 'Announcement deleted successfully.' });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  };
+
+  // Admin: Toggle teacher announcement permission
+  exports.toggleTeacherAnnounce = async (req, res) => {
+    try {
+      const { teacherId } = req.params;
+      const { canAnnounce } = req.body;
+      if (typeof canAnnounce !== 'boolean') {
+        return res.status(400).json({ message: 'canAnnounce must be boolean.' });
+      }
+      const teacher = await User.findOne({ _id: teacherId, role: 'teacher' });
+      if (!teacher) {
+        return res.status(404).json({ message: 'Teacher not found.' });
+      }
+      teacher.canAnnounce = canAnnounce;
+      await teacher.save();
+      res.json({ message: `Teacher announcement permission updated to ${canAnnounce}.` });
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  };
+
 // Search teachers for dropdown selection
 exports.searchTeachers = async (req, res) => {
   try {
@@ -145,6 +283,30 @@ const User = require('../models/User');
 const Course = require('../models/Course');
 const Video = require('../models/Video');
 const bcrypt = require('bcryptjs');
+
+// Helper: resolve an array of course identifiers (ObjectId strings or courseCode strings)
+// to an array of valid Course ObjectIds. Returns { ids, notFound }
+async function resolveCourseIdentifiers(identifiers) {
+  if (!Array.isArray(identifiers) || identifiers.length === 0) return { ids: [], notFound: [] };
+  const ids = [];
+  const notFound = [];
+  for (const raw of identifiers) {
+    if (!raw || typeof raw !== 'string') continue;
+    const trimmed = raw.trim();
+    // If already a valid ObjectId, use directly
+    if (mongoose.Types.ObjectId.isValid(trimmed)) {
+      ids.push(trimmed);
+      continue;
+    }
+    // Otherwise treat as courseCode
+    const course = await Course.findOne({ courseCode: trimmed });
+    if (course) ids.push(course._id);
+    else notFound.push(trimmed);
+  }
+  // De-duplicate
+  const unique = [...new Set(ids.map(id => id.toString()))];
+  return { ids: unique, notFound };
+}
 
 // Add a teacher manually
 exports.addTeacher = async (req, res) => {
@@ -402,7 +564,7 @@ exports.createStudent = async (req, res) => {
     }
     
     console.log('Creating student with data:', req.body);
-    const { name, email, password, regNo, coursesAssigned } = req.body;
+  const { name, email, password, regNo, coursesAssigned } = req.body;
     
     // Validate email format
     if (!email || !email.includes('@') || !email.includes('.')) {
@@ -452,13 +614,52 @@ exports.createStudent = async (req, res) => {
     }
     
     // Create the student
+    // Normalize incoming coursesAssigned (may arrive as string like "C000001" or "['C000001']")
+    let normalizedCourseInputs = [];
+    if (coursesAssigned) {
+      if (Array.isArray(coursesAssigned)) {
+        normalizedCourseInputs = coursesAssigned;
+      } else if (typeof coursesAssigned === 'string') {
+        let raw = coursesAssigned.trim();
+        // Attempt to parse bracketed list
+        if (raw.startsWith('[') && raw.endsWith(']')) {
+          try {
+            const jsonish = raw.replace(/'/g, '"');
+            const parsed = JSON.parse(jsonish);
+            if (Array.isArray(parsed)) normalizedCourseInputs = parsed.map(v => String(v).trim());
+            else normalizedCourseInputs = [String(parsed).trim()];
+          } catch (parseErr) {
+            console.warn('Failed to parse coursesAssigned string list, using raw value:', parseErr.message);
+            // Fallback: strip brackets and split by comma
+            raw = raw.slice(1, -1); // remove [ ]
+            normalizedCourseInputs = raw.split(',').map(s => s.replace(/['"\s]/g, '')).filter(Boolean);
+          }
+        } else {
+          normalizedCourseInputs = [raw];
+        }
+      }
+    }
+
+    // Resolve provided course identifiers (could be course codes or ObjectIds)
+    let resolvedCourses = [];
+    if (normalizedCourseInputs.length > 0) {
+      const { ids, notFound } = await resolveCourseIdentifiers(normalizedCourseInputs);
+      resolvedCourses = ids;
+      if (notFound.length === normalizedCourseInputs.length && ids.length === 0) {
+        return res.status(400).json({ message: 'None of the provided course identifiers were found', notFound });
+      }
+      if (notFound.length > 0) {
+        console.warn('Some course identifiers not found while creating student:', notFound);
+      }
+    }
+
     const student = new User({
       name,
       email: normalizedEmail,
       password: hashedPassword,
       role: 'student',
       regNo: studentRegNo,
-      coursesAssigned: coursesAssigned || []
+      coursesAssigned: resolvedCourses
     });
     
     console.log('Saving student:', student);
@@ -506,173 +707,187 @@ exports.createStudent = async (req, res) => {
 // Add student via CSV
 exports.bulkUploadStudents = async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-  const results = [];
-  const errors = [];
+
+  const rows = [];
+  const headerIssues = [];
+  const normalizedHeader = h => (h || '').trim().toLowerCase();
   const seenEmails = new Set();
-  
+
   fs.createReadStream(req.file.path)
-    .pipe(csv({
-      mapHeaders: ({ header }) => header.trim().toLowerCase() // Normalize headers
+    .pipe(csv({ 
+      mapHeaders: ({ header }) => normalizedHeader(header),
+      skipEmptyLines: true,
+      skipLinesWithError: false
     }))
-    .on('data', (data) => {
-      // Normalize the data object to ensure keys are lowercase
-      const normalizedData = {};
-      Object.keys(data).forEach(key => {
-        normalizedData[key.toLowerCase().trim()] = data[key];
-      });
-      results.push(normalizedData);
+    .on('data', (raw) => {
+      const norm = {};
+      Object.keys(raw).forEach(k => { norm[normalizedHeader(k)] = raw[k]; });
+      rows.push(norm);
     })
     .on('end', async () => {
+      const startedAt = Date.now();
+      console.log(`[bulkUploadStudents] Start processing ${rows.length} rows`);
       try {
-        // Validate all rows first
-        console.log(`Processing ${results.length} rows from CSV for students`);
-        
-        // Check for basic required fields in the CSV
-        if (results.length > 0) {
-          const firstRow = results[0];
-          const requiredFields = ['name', 'email', 'password'];
-          const missingHeaders = requiredFields.filter(field => 
-            !Object.keys(firstRow).some(key => key.toLowerCase() === field)
-          );
-          
-          if (missingHeaders.length > 0) {
-            fs.unlinkSync(req.file.path);
-            return res.status(400).json({ 
-              message: `CSV is missing required headers: ${missingHeaders.join(', ')}. Please use the template.` 
-            });
-          }
+        if (rows.length === 0) {
+          try { fs.unlinkSync(req.file.path); } catch (_) {}
+          return res.status(400).json({ message: 'CSV file is empty' });
         }
-        
-        for (let i = 0; i < results.length; i++) {
-          const row = results[i];
-          const rowNum = i + 2; // header is row 1
-          
-          if (!row.name || row.name.trim() === '') {
-            errors.push({ row: rowNum, message: 'Missing field: name' });
-          }
-          
-          if (!row.email || row.email.trim() === '') {
-            errors.push({ row: rowNum, message: 'Missing field: email' });
-          } else {
-            // Normalize email for comparison
-            const normalizedEmail = row.email.trim().toLowerCase();
-            
-            if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
-              errors.push({ row: rowNum, message: 'Invalid email format' });
-            }
-            
-            if (seenEmails.has(normalizedEmail)) {
-              errors.push({ row: rowNum, message: 'Duplicate email in file' });
-            }
-            seenEmails.add(normalizedEmail);
-          }
-          
-          if (!row.password || row.password.trim() === '') {
-            errors.push({ row: rowNum, message: 'Missing field: password' });
-          }
-          
-          // Validate regNo format if provided
-          if (row.regno && row.regno.trim() !== '') {
-            const regNo = row.regno.trim();
-            if (!regNo.startsWith('S') || !/^S\d{6}$/.test(regNo)) {
-              errors.push({ 
-                row: rowNum, 
-                message: 'Invalid registration number format. Should be S followed by 6 digits.' 
-              });
-            }
-          }
+
+        // Required logical columns (password now optional - will auto-generate if missing)
+        const first = rows[0];
+        const mustHaveAny = ['name', 'email'];
+        const missing = mustHaveAny.filter(col => !Object.prototype.hasOwnProperty.call(first, col));
+        if (missing.length) headerIssues.push(`Missing required header(s): ${missing.join(', ')}`);
+        if (headerIssues.length) {
+          try { fs.unlinkSync(req.file.path); } catch (_) {}
+          return res.status(400).json({ message: 'Header validation failed', errors: headerIssues });
         }
-        
-        // Check for existing emails in DB
-        const emails = results
-          .filter(r => r.email && r.email.trim() !== '')
-          .map(r => r.email.trim().toLowerCase());
-        
-        if (emails.length > 0) {
-          const existing = await User.find({ 
-            email: { $in: emails } 
-          }, 'email');
-          
-          for (const e of existing) {
-            const normalizedExistingEmail = e.email.toLowerCase();
-            const idx = results.findIndex(r => 
-              r.email && r.email.trim().toLowerCase() === normalizedExistingEmail
-            );
-            
-            if (idx !== -1) {
-              errors.push({ 
-                row: idx + 2, 
-                message: `Email ${results[idx].email} already exists in system` 
-              });
-            }
-          }
-        }
-        
-        if (errors.length > 0) {
-          fs.unlinkSync(req.file.path);
-          return res.status(400).json({ message: 'Validation failed', errors });
-        }
-        
-        // Find the highest existing regNo for auto-generation
+
+        // Pre-fetch existing emails to cut DB calls
+        const fileEmails = rows
+          .map(r => (r.email || '').trim().toLowerCase())
+          .filter(e => e !== '');
+        const uniqueFileEmails = [...new Set(fileEmails)];
+        const existingUsers = await User.find({ email: { $in: uniqueFileEmails } }, 'email');
+        const existingEmailSet = new Set(existingUsers.map(u => u.email.toLowerCase()));
+
+        // Find next reg number once
         let nextRegNumber = 1;
         const highestStudent = await User.findOne(
-          { regNo: { $regex: /^S\d{6}$/ } },
-          { regNo: 1 },
-          { sort: { regNo: -1 } }
+          { regNo: { $regex: /^S\d{6}$/ } }, { regNo: 1 }, { sort: { regNo: -1 } }
         );
-        
-        if (highestStudent && highestStudent.regNo) {
-          // Extract the number from existing regNo and increment
-          const currentNumber = parseInt(highestStudent.regNo.substring(1), 10);
-          nextRegNumber = currentNumber + 1;
+        if (highestStudent?.regNo) {
+          nextRegNumber = parseInt(highestStudent.regNo.substring(1), 10) + 1;
         }
-        
-        // If valid, insert all
-        for (const row of results) {
-          // Check if regNo is provided, otherwise generate one
-          let studentRegNo = (row.regno || '').trim();
-          if (!studentRegNo) {
-            // Format with leading zeros to ensure 6 digits
-            studentRegNo = 'S' + nextRegNumber.toString().padStart(6, '0');
-            nextRegNumber++; // Increment for next student
+
+        const results = [];
+        const rowErrors = [];
+        let successCount = 0;
+
+        // Helper for password generation
+        const genPassword = () => crypto.randomBytes(6).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0,10);
+
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+            const rowNum = i + 2; // counting header line as 1
+          try {
+            const nameRaw = (row.name || '').trim();
+            const emailRaw = (row.email || '').trim().toLowerCase();
+            const passwordRaw = (row.password || '').trim();
+            const regRaw = (row.regno || row['reg no'] || row['reg_no'] || '').trim();
+            let coursesRaw = (row.courseassigned || row.courseAssigned || row['course assigned'] || row.coursesassigned || '').trim();
+            
+            console.log(`[DEBUG] Row ${rowNum} - coursesRaw: "${coursesRaw}" (type: ${typeof coursesRaw})`);
+
+            // Basic validation
+            if (!nameRaw) throw new Error('Missing name');
+            if (!emailRaw) throw new Error('Missing email');
+            if (!/^\S+@\S+\.\S+$/.test(emailRaw)) throw new Error('Invalid email format');
+            if (seenEmails.has(emailRaw)) throw new Error('Duplicate email in CSV');
+            seenEmails.add(emailRaw);
+            if (existingEmailSet.has(emailRaw)) throw new Error('Email already exists');
+
+            // RegNo validation/generation
+            let regNoVal = regRaw;
+            if (regNoVal) {
+              if (!regNoVal.startsWith('S') || !/^S\d{6}$/.test(regNoVal)) {
+                throw new Error('Invalid registration number format (expected S + 6 digits)');
+              }
+            } else {
+              regNoVal = 'S' + nextRegNumber.toString().padStart(6, '0');
+              nextRegNumber++;
+            }
+
+            // Courses parsing: support comma, semicolon, bracket lists
+            let courseTokens = [];
+            if (coursesRaw) {
+              let rawStr = coursesRaw.trim();
+              
+              // Handle JSON array format like ["C000001","C000002"] or ['C000001','C000002']
+              if (rawStr.startsWith('[') && rawStr.endsWith(']')) {
+                try {
+                  // Try to parse as JSON array
+                  const parsed = JSON.parse(rawStr.replace(/'/g, '"'));
+                  if (Array.isArray(parsed)) {
+                    courseTokens = parsed.map(v => String(v).trim()).filter(Boolean);
+                  } else if (parsed) {
+                    courseTokens = [String(parsed).trim()];
+                  }
+                } catch (e) {
+                  // Fallback: remove brackets and split by delimiter
+                  rawStr = rawStr.slice(1, -1);
+                  courseTokens = rawStr.split(/[;,]/).map(s => s.replace(/['"\s]/g, '')).filter(Boolean);
+                }
+              } else {
+                // Handle simple comma/semicolon separated values
+                courseTokens = rawStr.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+              }
+            }
+
+            let resolvedCourses = [];
+            if (courseTokens.length > 0) {
+              console.log(`[DEBUG] Row ${rowNum} - courseTokens before resolve:`, courseTokens);
+              const { ids, notFound } = await resolveCourseIdentifiers(courseTokens);
+              console.log(`[DEBUG] Row ${rowNum} - resolved course IDs:`, ids);
+              console.log(`[DEBUG] Row ${rowNum} - not found courses:`, notFound);
+              
+              // The resolveCourseIdentifiers already returns ObjectId strings, just use them directly
+              resolvedCourses = ids;
+              if (notFound.length) {
+                console.warn(`[bulkUploadStudents] Row ${rowNum} unresolved course identifiers: ${notFound.join(', ')}`);
+              }
+            }
+            
+            console.log(`[DEBUG] Row ${rowNum} - final resolvedCourses:`, resolvedCourses);
+
+            const finalPassword = passwordRaw || genPassword();
+            const hashedPassword = await bcrypt.hash(finalPassword, 10);
+
+            const student = new User({
+              regNo: regNoVal,
+              name: nameRaw,
+              email: emailRaw,
+              password: hashedPassword,
+              role: 'student',
+              coursesAssigned: resolvedCourses
+            });
+            await student.save();
+            successCount++;
+            results.push({ row: rowNum, regNo: regNoVal, email: emailRaw, generatedPassword: passwordRaw ? null : finalPassword });
+            await AuditLog.create({
+              action: 'bulk_add_student',
+              performedBy: req.user._id,
+              targetUser: student._id,
+              details: { regNo: regNoVal, name: nameRaw, email: emailRaw }
+            });
+          } catch (err) {
+            rowErrors.push({ row: rowNum, message: err.message });
           }
-          
-          const name = row.name ? row.name.trim() : '';
-          const email = row.email ? row.email.trim().toLowerCase() : '';
-          const password = row.password ? row.password.trim() : '';
-          const courseAssigned = row.courseassigned || row.courseAssigned || row['course assigned'] || '';
-          
-          const hashedPassword = await bcrypt.hash(password, 10);
-          const student = new User({ 
-            regNo: studentRegNo, 
-            name, 
-            email, 
-            password: hashedPassword, 
-            role: 'student', 
-            coursesAssigned: courseAssigned ? [courseAssigned] : [] 
-          });
-          
-          await student.save();
-          await AuditLog.create({ 
-            action: 'bulk_add_student', 
-            performedBy: req.user._id, 
-            targetUser: student._id, 
-            details: { regNo: studentRegNo, name, email } 
-          });
         }
-        
-        fs.unlinkSync(req.file.path);
-        res.json({ 
-          message: `${results.length} students uploaded successfully` 
+
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+
+        const durationMs = Date.now() - startedAt;
+        console.log(`[bulkUploadStudents] Completed: ${successCount} success, ${rowErrors.length} failed in ${durationMs}ms`);
+
+        const status = rowErrors.length ? 207 : 200;
+        return res.status(status).json({
+          message: `Processed ${rows.length} rows: ${successCount} succeeded, ${rowErrors.length} failed`,
+            total: rows.length,
+          success: successCount,
+          failed: rowErrors.length,
+          results,
+          errors: rowErrors
         });
       } catch (err) {
-        console.error('Error in bulkUploadStudents:', err);
-        res.status(500).json({ message: err.message });
+        console.error('[bulkUploadStudents] Fatal error:', err);
+        try { fs.unlinkSync(req.file.path); } catch (_) {}
+        return res.status(500).json({ message: err.message });
       }
     })
     .on('error', (err) => {
-      console.error('CSV parsing error:', err);
-      res.status(400).json({ message: `CSV parsing error: ${err.message}` });
+      console.error('[bulkUploadStudents] CSV parsing error:', err);
+      return res.status(400).json({ message: `CSV parsing error: ${err.message}` });
     });
 };
 
@@ -720,10 +935,47 @@ exports.getAssignmentHistory = async (req, res) => {
 exports.editStudent = async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
-  await User.findByIdAndUpdate(id, updates);
-  await AuditLog.create({ action: 'edit_student', performedBy: req.user._id, targetUser: id, details: updates });
-  res.json({ message: 'Student updated' });
+    const updates = { ...req.body };
+
+    // Allow single field alias 'courseAssigned'
+    if (!updates.coursesAssigned && updates.courseAssigned) {
+      updates.coursesAssigned = updates.courseAssigned;
+      delete updates.courseAssigned;
+    }
+
+    if (updates.coursesAssigned) {
+      // Normalize to array of strings
+      let rawList = updates.coursesAssigned;
+      if (typeof rawList === 'string') {
+        let trimmed = rawList.trim();
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          try {
+            const parsed = JSON.parse(trimmed.replace(/'/g, '"'));
+            if (Array.isArray(parsed)) rawList = parsed; else rawList = [parsed];
+          } catch (_) {
+            // fallback split by comma / semicolon
+            trimmed = trimmed.slice(1, -1); // remove brackets
+            rawList = trimmed.split(/[;,]/).map(s => s.replace(/['"\s]/g, '')).filter(Boolean);
+          }
+        } else {
+          rawList = trimmed.split(/[;,]/).map(s => s.trim()).filter(Boolean);
+        }
+      }
+      if (!Array.isArray(rawList)) rawList = [String(rawList)];
+      // Resolve each identifier (ObjectId or courseCode)
+      const { ids, notFound } = await resolveCourseIdentifiers(rawList.map(String));
+      if (rawList.length && ids.length === 0) {
+        return res.status(400).json({ message: 'No provided course identifiers could be resolved', notFound });
+      }
+      if (notFound.length > 0) {
+        console.warn(`[editStudent] Unresolved course identifiers for student ${id}:`, notFound);
+      }
+      updates.coursesAssigned = ids; // Replace with resolved ObjectIds
+    }
+
+    await User.findByIdAndUpdate(id, updates);
+    await AuditLog.create({ action: 'edit_student', performedBy: req.user._id, targetUser: id, details: updates });
+    res.json({ message: 'Student updated' });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

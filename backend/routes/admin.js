@@ -46,6 +46,19 @@ router.get('/courses', adminController.getAllCourses);
 router.get('/students', adminController.getAllStudents);
 // Get all teachers
 router.get('/teachers', adminController.getAllTeachers);
+// Super admin: Create announcement for teachers and/or students
+router.post('/announcement', adminController.createAnnouncement);
+// Edit announcement
+router.put('/announcement/:id', adminController.updateAnnouncement);
+// Delete announcement
+router.delete('/announcement/:id', adminController.deleteAnnouncement);
+
+// Admin: Toggle teacher announcement permission
+router.patch('/teacher/:teacherId/announce-permission', adminController.toggleTeacherAnnounce);
+
+// Get all announcements
+router.get('/announcement', require('../controllers/announcementController').getAnnouncements);
+
 // Search teachers (for dropdown)
 router.get('/teachers/search', adminController.searchTeachers);
 
