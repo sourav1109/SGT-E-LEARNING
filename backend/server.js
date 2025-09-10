@@ -52,7 +52,7 @@ app.use('/api/student', studentQuizAttemptRoutes); // Student quiz attempt route
 app.use('/api/student', unitQuizRoutes); // Unit quiz routes for students
 
 // Connect to MongoDB using only the .env file configuration
-mongoose.connect(process.env.MONGODB_URI)
+mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('MongoDB Connected Successfully');
     

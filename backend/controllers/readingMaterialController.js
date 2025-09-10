@@ -5,7 +5,17 @@ const StudentProgress = require('../models/StudentProgress');
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+// ...existing code...
+let uuidv4;
+
+async function getUuidV4() {
+  if (!uuidv4) {
+    const mod = await import('uuid');
+    uuidv4 = mod.v4;
+  }
+  return uuidv4;
+}
+// ...existing code...
 
 // Create a new reading material
 exports.createReadingMaterial = async (req, res) => {
@@ -33,7 +43,8 @@ exports.createReadingMaterial = async (req, res) => {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
       
-      const filename = `${uuidv4()}-${req.file.originalname}`;
+  const uuidv4 = await getUuidV4();
+  const filename = `${uuidv4()}-${req.file.originalname}`;
       const filePath = path.join(uploadDir, filename);
       
       // Write file to disk
@@ -101,7 +112,8 @@ exports.updateReadingMaterial = async (req, res) => {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
       
-      const filename = `${uuidv4()}-${req.file.originalname}`;
+  const uuidv4 = await getUuidV4();
+  const filename = `${uuidv4()}-${req.file.originalname}`;
       const filePath = path.join(uploadDir, filename);
       
       // Write file to disk
