@@ -1,3 +1,13 @@
+// Allow teacher or admin
+exports.isTeacherOrAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+  if (req.user.role === 'admin' || req.user.role === 'teacher') {
+    return next();
+  }
+  return res.status(403).json({ message: 'Teacher or admin access required' });
+};
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 

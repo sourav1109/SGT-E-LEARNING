@@ -25,17 +25,61 @@ axios.interceptors.request.use(
 
 // Add response interceptor for handling auth errors
 axios.interceptors.response.use(
-  response => response,
+  response => {
+    // Log successful responses for debugging
+    console.log(`API Response Success: ${response.config.method?.toUpperCase()} ${response.config.url}`);
+    return response;
+  },
   error => {
-    // If unauthorized or token expired, redirect to login
+    // Log all API errors for debugging
+    console.group('API Error');
+    console.error('Error:', error.message);
+    console.error('URL:', error.config?.url);
+    console.error('Method:', error.config?.method);
+    console.error('Status:', error.response?.status);
+    console.error('Response Data:', error.response?.data);
+    console.error('Current Path:', window.location.pathname);
+    console.groupEnd();
+    
+    // Special handling for quiz-related endpoints - don't redirect immediately to avoid navigation issues
+    const isQuizEndpoint = error.config?.url?.includes('/quiz/');
+    const isQuizPage = window.location.pathname.includes('/quiz/');
+    
+    // If unauthorized or token expired, handle based on context
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
       console.log('Authentication error:', error.response.data);
       
-      // If token is invalid or expired, logout and redirect
+      // If token is invalid or expired
       if (error.response.data.message === 'Token is not valid' || 
           error.response.data.message === 'Token expired') {
-        logoutUser();
-        window.location = '/login';
+          
+        // Store current location for redirect after login
+        if (!window.location.pathname.includes('/login')) {
+          localStorage.setItem('redirectAfterLogin', window.location.pathname + window.location.search);
+        }
+        
+        // For quiz pages, handle differently to avoid redirect loops
+        if (isQuizPage || isQuizEndpoint) {
+          console.warn('Auth error on quiz page - handling specially to avoid redirect loop');
+          
+          // Don't auto-redirect, let the component handle it
+          // Just clear the invalid token but keep the redirect info
+          localStorage.removeItem('token');
+          
+          // Add an auth error flag that components can check
+          localStorage.setItem('authError', 'true');
+          
+          // For API calls, still reject the promise so components can handle
+          return Promise.reject(error);
+        } else {
+          // For non-quiz pages, proceed with normal logout and redirect
+          logoutUser();
+          
+          // Delay redirect to allow current code to finish
+          setTimeout(() => {
+            window.location = '/login';
+          }, 100);
+        }
       }
     }
     

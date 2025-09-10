@@ -58,3 +58,25 @@ export const removeStudent = async (id, token) => {
   });
   return res.data;
 };
+
+// Student quiz pool API functions
+export const getQuizPoolForStudent = async (quizPoolId, token) => {
+  const res = await axios.get(`/api/quiz-pools/${quizPoolId}/student`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+export const submitQuizPoolAttempt = async (quizPoolId, attemptData, token) => {
+  const res = await axios.post(`/api/quiz-pools/${quizPoolId}/submit`, attemptData, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+export const getStudentQuizPoolAttempts = async (courseId, token) => {
+  const res = await axios.get(`/api/student/course/${courseId}/quiz-pool-attempts`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};

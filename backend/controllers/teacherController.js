@@ -2,6 +2,8 @@ const User = require('../models/User');
 const Course = require('../models/Course');
 const Video = require('../models/Video');
 const Discussion = require('../models/Discussion');
+const Unit = require('../models/Unit');
+const mongoose = require('mongoose');
 
 // Get all courses assigned to the teacher
 exports.getTeacherCourses = async (req, res) => {
@@ -17,12 +19,69 @@ exports.getTeacherCourses = async (req, res) => {
   }
 };
 
+// Get details of a specific course
+exports.getCourseDetails = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    
+    // Validate courseId
+    if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({ message: 'Invalid course ID' });
+    }
+    
+    // For admin users, just find the course without teacher restriction
+    if (req.user.role === 'admin') {
+      const course = await Course.findById(courseId)
+        .populate('teachers', 'name email teacherId')
+        .populate('students')
+        .populate('videos')
+        .select('-__v');
+      
+      if (!course) {
+        return res.status(404).json({ message: 'Course not found' });
+      }
+      
+      return res.json(course);
+    }
+    
+    // For teachers, verify they are assigned to the course
+    const course = await Course.findOne({ 
+      _id: courseId, 
+      teachers: req.user._id 
+    })
+    .populate('teachers', 'name email teacherId')
+    .populate('students')
+    .populate('videos')
+    .select('-__v');
+    
+    if (!course) {
+      return res.status(404).json({ message: 'Course not found or not authorized' });
+    }
+    
+    res.json(course);
+  } catch (err) {
+    console.error('Error getting course details:', err);
+    res.status(500).json({ message: 'Error fetching course details' });
+  }
+};
+
 // Get students enrolled in a specific course
 exports.getCourseStudents = async (req, res) => {
   try {
     const { courseId } = req.params;
     
-    // Verify teacher is assigned to this course
+    // For admin users, skip teacher verification
+    if (req.user.role === 'admin') {
+      // Find all students enrolled in this course
+      const students = await User.find({ 
+        role: 'student',
+        coursesAssigned: courseId
+      }).select('name email regNo');
+      
+      return res.json(students);
+    }
+    
+    // For teachers, verify they are assigned to this course
     const course = await Course.findOne({ 
       _id: courseId, 
       teachers: req.user._id 
@@ -50,7 +109,16 @@ exports.getCourseVideos = async (req, res) => {
   try {
     const { courseId } = req.params;
     
-    // Verify teacher is assigned to this course
+    // For admin users, skip teacher verification
+    if (req.user.role === 'admin') {
+      // Find all videos for this course
+      const videos = await Video.find({ course: courseId })
+        .select('title description videoUrl duration teacher');
+      
+      return res.json(videos);
+    }
+    
+    // For teachers, verify they are assigned to this course
     const course = await Course.findOne({ 
       _id: courseId, 
       teachers: req.user._id 
@@ -75,7 +143,7 @@ exports.getCourseVideos = async (req, res) => {
 exports.uploadCourseVideo = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const { title, description } = req.body;
+    const { title, description, unitId } = req.body;
     
     // Verify teacher is assigned to this course
     const course = await Course.findOne({ 
@@ -91,6 +159,13 @@ exports.uploadCourseVideo = async (req, res) => {
       return res.status(400).json({ message: 'No video file uploaded' });
     }
     
+    // Check if units exist for this course
+    const unitCount = await Unit.countDocuments({ course: courseId });
+    
+    if (unitCount > 0 && (!unitId || !mongoose.Types.ObjectId.isValid(unitId))) {
+      return res.status(400).json({ message: 'Unit selection is required for this course' });
+    }
+    
     // Create video entry in database
     const video = new Video({
       title,
@@ -100,6 +175,18 @@ exports.uploadCourseVideo = async (req, res) => {
       videoUrl: `/uploads/${req.file.filename}`,
       duration: 0 // This would be calculated properly in a real implementation
     });
+    
+    // If unitId is provided, associate the video with that unit
+    if (unitId && mongoose.Types.ObjectId.isValid(unitId)) {
+      // Check if the unit exists and belongs to this course
+      const unit = await Unit.findOne({ _id: unitId, course: courseId });
+      if (unit) {
+        video.unit = unitId;
+        // Add video to unit
+        unit.videos.push(video._id);
+        await unit.save();
+      }
+    }
     
     await video.save();
     
@@ -226,7 +313,45 @@ exports.getCourseForums = async (req, res) => {
   try {
     const { courseId } = req.params;
     
-    // Verify teacher is assigned to this course
+    // For admin users, skip teacher verification
+    if (req.user.role === 'admin') {
+      // Find course to get title for default forum if needed
+      const course = await Course.findById(courseId);
+      
+      if (!course) {
+        return res.status(404).json({ message: 'Course not found' });
+      }
+      
+      // Find all discussions for this course
+      const discussions = await Discussion.find({ course: courseId })
+        .sort({ timestamp: -1 })
+        .select('title description timestamp postCount');
+      
+      // If no discussions exist, create a default one
+      if (discussions.length === 0) {
+        const defaultForum = {
+          _id: courseId,
+          title: `${course.title} Discussion`,
+          description: 'General discussion about the course',
+          postCount: 0,
+          lastActivity: new Date()
+        };
+        return res.json([defaultForum]);
+      }
+      
+      // Format the discussions
+      const forums = discussions.map(discussion => ({
+        _id: discussion._id,
+        title: discussion.title,
+        description: discussion.description || 'Course discussion forum',
+        postCount: discussion.postCount || 0,
+        lastActivity: discussion.timestamp
+      }));
+      
+      return res.json(forums);
+    }
+    
+    // For teachers, verify they are assigned to this course
     const course = await Course.findOne({ 
       _id: courseId, 
       teachers: req.user._id 

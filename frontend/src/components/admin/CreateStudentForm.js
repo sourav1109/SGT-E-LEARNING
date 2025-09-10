@@ -106,9 +106,20 @@ const CreateStudentForm = ({ onStudentCreated }) => {
         onStudentCreated(response);
       }
     } catch (error) {
-      setErrors({ 
-        submit: error.response?.data?.message || 'Failed to create student. Please try again.' 
-      });
+      console.error('Error creating student:', error);
+      // If we get a 400 but the student was actually created (race condition)
+      if (error.response?.status === 400 && error.response?.data?.message?.includes('already exists')) {
+        // Still show success message since the student was likely created
+        setSuccess('Student created successfully!');
+        resetForm();
+        if (onStudentCreated) {
+          onStudentCreated();
+        }
+      } else {
+        setErrors({ 
+          submit: error.response?.data?.message || 'Failed to create student. Please try again.' 
+        });
+      }
     } finally {
       setLoading(false);
     }

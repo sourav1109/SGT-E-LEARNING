@@ -28,6 +28,7 @@ import { updateWatchHistory } from '../../api/studentVideoApi';
 import { formatDuration } from '../../utils/videoUtils';
 
 const CustomVideoPlayer = ({ videoId, videoUrl, title, token, onTimeUpdate, onVideoComplete }) => {
+  console.log('CustomVideoPlayer received videoUrl:', videoUrl);
   const videoRef = useRef(null);
   const videoContainerRef = useRef(null);
   const containerRef = useRef(null);
@@ -41,6 +42,12 @@ const CustomVideoPlayer = ({ videoId, videoUrl, title, token, onTimeUpdate, onVi
   const [error, setError] = useState(null);
   const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
   const [timeWatched, setTimeWatched] = useState(0);
+  const [totalWatchTime, setTotalWatchTime] = useState(0);
+  const [cumulativeWatchTime, setCumulativeWatchTime] = useState(0); // Total across all sessions including rewatches
+  const [watchingSessions, setWatchingSessions] = useState([]);
+  const [sessionStartTime, setSessionStartTime] = useState(null);
+  const [previousPosition, setPreviousPosition] = useState(0);
+  const [watchedSegments, setWatchedSegments] = useState(new Set()); // Track 5-second segments watched
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [controlsTimeout, setControlsTimeout] = useState(null);
@@ -148,21 +155,23 @@ const CustomVideoPlayer = ({ videoId, videoUrl, title, token, onTimeUpdate, onVi
       // Update watch time when component unmounts
       updateWatchTime(true);
     };
-    // Only re-run when video URL changes, not on every state change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // We're intentionally excluding some dependencies like volume, playbackRate, isMuted,
+    // isPlaying, duration, and currentTime because we don't want to reinitialize the
+    // video player every time these values change
+    // eslint-disable-next-line
   }, [videoUrl]);
 
   // Update watch time at regular intervals
   useEffect(() => {
     const intervalId = setInterval(() => {
-      if (isPlaying && timeWatched > 0.5) {  // Only update if we have meaningful time accumulated
+      if (isPlaying && totalWatchTime > 0.5) {  // Only update if we have meaningful time accumulated
         updateWatchTime(false);
       }
     }, 10000); // Update every 10 seconds for more accurate tracking
 
     return () => clearInterval(intervalId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, timeWatched]);
+    // eslint-disable-next-line
+  }, [isPlaying, totalWatchTime]);
 
   const handleLoadedMetadata = () => {
     if (!videoRef.current) return;
@@ -251,49 +260,50 @@ const CustomVideoPlayer = ({ videoId, videoUrl, title, token, onTimeUpdate, onVi
     const video = videoRef.current;
     if (!video) return;
     
-    // Store previous time to calculate actual change
-    const prevTime = currentTime;
-    
     // Update current position
     const newCurrentTime = video.currentTime;
     setCurrentTime(newCurrentTime);
     
     // IMPORTANT: Update duration if it's not set correctly yet
-    // This is critical as some browsers might not properly load metadata
     const videoDuration = video.duration;
     if ((duration === 0 || isNaN(duration)) && videoDuration > 0 && !isNaN(videoDuration)) {
       console.log(`Updating duration in timeUpdate: ${videoDuration}s`);
       setDuration(videoDuration);
-      
-      // Also store in dataset for backup
       video.dataset.duration = videoDuration;
     }
     
     // Even if we already have a duration, check if it needs updating
-    // This handles cases where the duration might change (adaptive streaming)
     if (!isNaN(videoDuration) && videoDuration > 0 && Math.abs(duration - videoDuration) > 1) {
       console.log(`Correcting duration from ${duration}s to ${videoDuration}s`);
       setDuration(videoDuration);
     }
     
-    // Calculate time watched since last update
-    const now = Date.now();
-    
-    // Only accumulate time when the video is actually playing
-    if (isPlaying) {
-      // Calculate time difference in video playback
-      // This is more accurate than using elapsed real time
-      const videoTimeDiff = Math.abs(newCurrentTime - prevTime);
+    // Track continuous playback during active session
+    if (isPlaying && sessionStartTime) {
+      const now = Date.now();
+      const timeSinceLastUpdate = (now - lastUpdateTime) / 1000;
       
-      // Ensure we're not adding negative time or unreasonably large jumps
-      // (which would happen during seeking)
-      if (videoTimeDiff > 0 && videoTimeDiff < 1) {  // Normal playback increments
-        setTimeWatched(prev => prev + videoTimeDiff);
-        console.log(`Added ${videoTimeDiff.toFixed(2)}s to watched time. Total: ${(timeWatched + videoTimeDiff).toFixed(2)}s`);
+      // Only update if reasonable time has passed (between 0.1 and 2 seconds)
+      if (timeSinceLastUpdate >= 0.1 && timeSinceLastUpdate <= 2) {
+        // Track the current 5-second segment
+        if (videoDuration > 0) {
+          const currentSegment = Math.floor(newCurrentTime / 5);
+          setWatchedSegments(prev => {
+            const newSegments = new Set(prev);
+            newSegments.add(currentSegment);
+            
+            // Update cumulative time based on unique segments
+            const totalSegmentsWatched = newSegments.size;
+            const segmentBasedTime = totalSegmentsWatched * 5;
+            setCumulativeWatchTime(Math.min(segmentBasedTime, videoDuration));
+            
+            return newSegments;
+          });
+        }
+        
+        setLastUpdateTime(now);
       }
     }
-    
-    setLastUpdateTime(now);
     
     // Call the onTimeUpdate callback if provided
     if (onTimeUpdate) {
@@ -306,42 +316,69 @@ const CustomVideoPlayer = ({ videoId, videoUrl, title, token, onTimeUpdate, onVi
     setIsPlaying(false);
     setVideoEnded(true);
     
+    // End the current watching session if active
+    if (sessionStartTime) {
+      const sessionEnd = Date.now();
+      const sessionDuration = (sessionEnd - sessionStartTime) / 1000;
+      const video = videoRef.current;
+      const currentPos = video ? video.currentTime : duration;
+      
+      if (sessionDuration >= 0.5) {
+        // Calculate actual video time for this final session
+        const videoTimeWatched = Math.abs(currentPos - previousPosition);
+        const actualWatchTime = Math.min(sessionDuration, videoTimeWatched + 1);
+        
+        // Complete the segment tracking
+        if (video && video.duration > 0) {
+          const startSegment = Math.floor(previousPosition / 5);
+          const endSegment = Math.floor(currentPos / 5);
+          const totalSegments = Math.ceil(video.duration / 5);
+          
+          const newSegments = new Set(watchedSegments);
+          for (let i = startSegment; i <= Math.min(endSegment, totalSegments - 1); i++) {
+            newSegments.add(i);
+          }
+          
+          setWatchedSegments(newSegments);
+          setCumulativeWatchTime(Math.min(newSegments.size * 5, video.duration));
+        }
+        
+        setWatchingSessions(prev => [...prev, {
+          start: sessionStartTime,
+          end: sessionEnd,
+          duration: actualWatchTime,
+          videoPosition: currentPos,
+          startPosition: previousPosition,
+          isEndingSession: true
+        }]);
+        
+        setTotalWatchTime(prev => prev + actualWatchTime);
+        console.log(`🏁 Final session: ${actualWatchTime.toFixed(2)}s, Cumulative: ${cumulativeWatchTime.toFixed(2)}s`);
+      }
+      
+      setSessionStartTime(null);
+    }
+    
     // Set a flag to indicate this video has ended
     if (videoRef.current) {
       videoRef.current.dataset.ended = "true";
     }
     
-    // Ensure we've captured all of the watch time
-    if (timeWatched > 0) {
-      // Force isCompleted to true since the video has played to the end
+    // Force update with completion status
+    if (cumulativeWatchTime > 0 || totalWatchTime > 0) {
       updateWatchTime(true);
     }
     
-    // Instead of immediately notifying parent, add a small delay
-    // to prevent state thrashing that could cause shivering
+    // Notify parent after delay
     setTimeout(() => {
-      // Only notify if we still have a valid video reference and haven't already notified
       if (videoRef.current && onVideoComplete && videoRef.current.dataset.notified !== "true") {
-        console.log(`Notifying parent that video ${videoId} is completed (delayed)`);
-        // Mark video as notified to prevent duplicate notifications
+        console.log(`🎯 Video completed - notifying parent`);
         videoRef.current.dataset.notified = "true";
         onVideoComplete(videoId);
       }
     }, 500);
     
-    console.log(`Video ended with ${timeWatched.toFixed(2)}s accumulated watch time`);
-    
-    // Prevent any automatic restarts or state changes that might cause shivering
-    // by setting a stable end state
-    if (videoRef.current) {
-      videoRef.current.removeEventListener('timeupdate', handleTimeUpdate);
-      // Re-add after a short delay to stop rapid updates at the end
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.addEventListener('timeupdate', handleTimeUpdate);
-        }
-      }, 1000);
-    }
+    console.log(`🎬 Video ended - Total: ${totalWatchTime.toFixed(2)}s, Cumulative: ${cumulativeWatchTime.toFixed(2)}s`);
   };
 
   const handleVideoError = (e) => {
@@ -355,16 +392,17 @@ const CustomVideoPlayer = ({ videoId, videoUrl, title, token, onTimeUpdate, onVi
     console.log("Video play event triggered");
     setIsPlaying(true);
     
-    // Reset the last update time when video starts playing
-    // to avoid counting the paused time
-    setLastUpdateTime(Date.now());
+    // Start a new watching session
+    const sessionStart = Date.now();
+    setSessionStartTime(sessionStart);
+    setLastUpdateTime(sessionStart);
     
-    // Log accurate information
+    // Record the starting position for this session
     const video = videoRef.current;
     if (video) {
-      // Store that the video is playing for tab visibility tracking
+      setPreviousPosition(video.currentTime);
       video.dataset.wasPlaying = "true";
-      console.log(`Video started playing at ${video.currentTime.toFixed(2)}/${video.duration.toFixed(2)}`);
+      console.log(`🎥 Video started playing at ${video.currentTime.toFixed(2)}/${video.duration.toFixed(2)} - Session started`);
     }
   };
 
@@ -373,21 +411,64 @@ const CustomVideoPlayer = ({ videoId, videoUrl, title, token, onTimeUpdate, onVi
     console.log("Video pause event triggered");
     setIsPlaying(false);
     
-    // Get accurate position information
-    const video = videoRef.current;
-    if (!video) return;
-    
-    // Clear the playing state flag
-    video.dataset.wasPlaying = "";
-    
-    const position = video.currentTime;
-    
-    // When paused, update watch history immediately if we have accumulated enough time
-    if (timeWatched > 0.5) {
-      updateWatchTime(false);
+    // End the current watching session
+    if (sessionStartTime) {
+      const sessionEnd = Date.now();
+      const sessionDuration = (sessionEnd - sessionStartTime) / 1000; // Convert to seconds
+      
+      // Only count sessions longer than 0.5 seconds to avoid accidental clicks
+      if (sessionDuration >= 0.5) {
+        const video = videoRef.current;
+        const currentPos = video ? video.currentTime : previousPosition;
+        
+        // Calculate actual video time watched during this session
+        const videoTimeWatched = Math.abs(currentPos - previousPosition);
+        const actualWatchTime = Math.min(sessionDuration, videoTimeWatched + 1); // Allow 1 second buffer for normal playback
+        
+        // Add watched segments to our tracking (in 5-second chunks)
+        if (video && video.duration > 0) {
+          const startSegment = Math.floor(previousPosition / 5);
+          const endSegment = Math.floor(currentPos / 5);
+          const newSegments = new Set(watchedSegments);
+          
+          for (let i = startSegment; i <= endSegment; i++) {
+            newSegments.add(i);
+          }
+          setWatchedSegments(newSegments);
+          
+          // Calculate cumulative time based on unique segments watched
+          const totalSegmentsWatched = newSegments.size;
+          const segmentBasedTime = totalSegmentsWatched * 5; // Each segment = 5 seconds
+          setCumulativeWatchTime(Math.min(segmentBasedTime, video.duration));
+        }
+        
+        const sessionRecord = {
+          start: sessionStartTime,
+          end: sessionEnd,
+          duration: actualWatchTime,
+          videoPosition: currentPos,
+          startPosition: previousPosition,
+          segmentsAdded: Math.abs(Math.floor(currentPos / 5) - Math.floor(previousPosition / 5)) + 1
+        };
+        
+        setWatchingSessions(prev => [...prev, sessionRecord]);
+        setTotalWatchTime(prev => prev + actualWatchTime);
+        
+        console.log(`⏸️ Session ended:`);
+        console.log(`   Duration: ${actualWatchTime.toFixed(2)}s`);
+        console.log(`   Position: ${previousPosition.toFixed(2)}s → ${currentPos.toFixed(2)}s`);
+        console.log(`   Total Time: ${(totalWatchTime + actualWatchTime).toFixed(2)}s`);
+        console.log(`   Cumulative: ${cumulativeWatchTime.toFixed(2)}s`);
+      }
+      
+      setSessionStartTime(null);
     }
     
-    console.log(`Video paused at ${position.toFixed(2)}s, accumulated watch time: ${timeWatched.toFixed(2)}s`);
+    // Clear the playing state flag
+    const video = videoRef.current;
+    if (video) {
+      video.dataset.wasPlaying = "";
+    }
   };
 
   const updateWatchTime = async (isFinal = false) => {
@@ -403,57 +484,84 @@ const CustomVideoPlayer = ({ videoId, videoUrl, title, token, onTimeUpdate, onVi
         return;
       }
       
+      // Calculate different time metrics
+      let sessionBasedTime = totalWatchTime;
+      let segmentBasedTime = cumulativeWatchTime;
+      
+      // If currently playing, add the current session time
+      if (isPlaying && sessionStartTime) {
+        const currentSessionTime = (Date.now() - sessionStartTime) / 1000;
+        sessionBasedTime += currentSessionTime;
+      }
+      
+      // Use the more accurate metric (segment-based for rewatches, session-based for linear viewing)
+      const timeToReport = Math.max(segmentBasedTime, sessionBasedTime * 0.8); // Slightly reduce session time to account for pauses
+      
       // Only report if we have actual time to report or if this is a final update
-      if (timeWatched > 0.1 || isFinal) {
-        // Ensure timeSpent is a valid number (minimum 0.1 seconds to avoid API validation issues)
-        const timeToReport = Math.max(0.1, timeWatched || 0);
+      if (timeToReport > 0.1 || isFinal) {
+        // Ensure timeSpent is a valid number
+        const sanitizedTimeToReport = Math.max(0.1, timeToReport || 0);
         
         // Calculate completion status
-        // A video is considered complete if:
-        // 1. The current position is at least 95% of the duration, OR
-        // 2. The video has ended (isFinal=true for ended event), OR
-        // 3. The accumulated watch time exceeds 95% of the duration
-        // Using a higher threshold (95% instead of 90%) to ensure students watch more of the video
-        const completionThreshold = 0.95;
+        const completionThreshold = 0.90; // 90% completion threshold
         const currentPos = currentTime || 0;
-        const totalDuration = duration || 100; // Use a default if duration is not available
+        const totalDuration = duration || 100;
         
         const isPositionCompleted = totalDuration > 0 && (currentPos / totalDuration) >= completionThreshold;
         const isTimeCompleted = totalDuration > 0 && timeToReport >= (totalDuration * completionThreshold);
-        const isCompleted = isPositionCompleted || isTimeCompleted || isFinal;
+        const isSegmentCompleted = totalDuration > 0 && (segmentBasedTime / totalDuration) >= completionThreshold;
+        const isCompleted = isPositionCompleted || isTimeCompleted || isSegmentCompleted || isFinal;
         
-        // Prepare analytics data
+        // Prepare detailed analytics data
         const analyticsData = {
-          timeSpent: timeToReport,
+          timeSpent: sanitizedTimeToReport,
+          sessionTime: sessionBasedTime,
+          segmentTime: segmentBasedTime,
           currentTime: currentPos,
           duration: totalDuration,
           playbackRate: playbackRate || 1,
           isCompleted: isCompleted,
           timestamp: new Date().toISOString(),
-          isFinal: isFinal
+          isFinal: isFinal,
+          sessionCount: watchingSessions.length + (sessionStartTime ? 1 : 0),
+          segmentsWatched: watchedSegments.size,
+          totalSegments: totalDuration > 0 ? Math.ceil(totalDuration / 5) : 0,
+          completionPercentage: totalDuration > 0 ? Math.min(100, (segmentBasedTime / totalDuration) * 100) : 0,
+          averageSessionLength: watchingSessions.length > 0 
+            ? watchingSessions.reduce((sum, session) => sum + session.duration, 0) / watchingSessions.length 
+            : 0
         };
         
-        console.log(`Sending analytics update: Time: ${timeToReport.toFixed(2)}s, Position: ${currentPos.toFixed(2)}/${totalDuration.toFixed(2)}s, Completed: ${isCompleted}`);
+        console.log(`📊 Sending enhanced analytics:`);
+        console.log(`   📽️ Reported Time: ${sanitizedTimeToReport.toFixed(2)}s (${Math.floor(sanitizedTimeToReport/60)}m ${Math.floor(sanitizedTimeToReport%60)}s)`);
+        console.log(`   🎬 Session Time: ${sessionBasedTime.toFixed(2)}s`);
+        console.log(`   🧩 Segment Time: ${segmentBasedTime.toFixed(2)}s`);
+        console.log(`   📍 Position: ${currentPos.toFixed(2)}/${totalDuration.toFixed(2)}s`);
+        console.log(`   🔢 Segments: ${watchedSegments.size}/${analyticsData.totalSegments}`);
+        console.log(`   📈 Completion: ${analyticsData.completionPercentage.toFixed(1)}%`);
+        console.log(`   ✅ Completed: ${isCompleted}`);
         
         // Send to backend
         const response = await updateWatchHistory(videoId, analyticsData, token);
-        console.log("Watch history update response:", response);
+        console.log("✅ Watch history updated successfully:", response);
 
-        // Reset the accumulated time if it was successfully sent and not a final update
+        // Reset tracking if successful and not a final update
         if (!isFinal) {
-          setTimeWatched(0);
+          setTotalWatchTime(0);
+          setWatchingSessions([]);
+          // Keep cumulative time and segments for continued tracking
         }
         
         // If this is a final update and the video is completed, notify parent
         if (isFinal && isCompleted && onVideoComplete) {
-          console.log(`Final update with completion - notifying parent for video ${videoId}`);
+          console.log(`🎯 Final completion notification for video ${videoId}`);
           onVideoComplete(videoId);
         }
       } else {
-        console.log('Skipping update - insufficient watch time accumulated');
+        console.log('⏭️ Skipping update - insufficient watch time accumulated');
       }
     } catch (err) {
-      console.error('Error updating watch history:', err);
+      console.error('❌ Error updating watch history:', err);
     }
   };
 
@@ -515,10 +623,16 @@ const CustomVideoPlayer = ({ videoId, videoUrl, title, token, onTimeUpdate, onVi
   // Allow controlled seeking through the progress bar
   const handleProgressChange = (event, newValue) => {
     if (videoRef.current) {
+      // Record the position before seeking for tracking purposes
+      const oldPosition = videoRef.current.currentTime;
+      setPreviousPosition(oldPosition);
+      
       // Update the video position to the new value
       videoRef.current.currentTime = newValue;
       // Update state to reflect the new position
       setCurrentTime(newValue);
+      
+      console.log(`🔍 Seek: ${oldPosition.toFixed(2)}s → ${newValue.toFixed(2)}s`);
     }
   };
 

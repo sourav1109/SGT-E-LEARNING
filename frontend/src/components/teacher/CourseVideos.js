@@ -14,12 +14,18 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import { useParams, Link } from 'react-router-dom';
-import { getCourseVideos } from '../../api/teacherApi';
+import { getCourseVideos, uploadCourseVideo, getTeacherUnitsByCourse } from '../../api/teacherApi';
 import DeleteIcon from '@mui/icons-material/Delete';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 
 const CourseVideos = ({ token, user }) => {
   const { courseId } = useParams();
@@ -29,6 +35,16 @@ const CourseVideos = ({ token, user }) => {
   const [courseTitle, setCourseTitle] = useState('');
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
+  const [uploadDialog, setUploadDialog] = useState(false);
+  const [uploadData, setUploadData] = useState({
+    title: '',
+    description: '',
+    unitId: ''
+  });
+  const [units, setUnits] = useState([]);
+  const [videoFile, setVideoFile] = useState(null);
+  const [fileName, setFileName] = useState('');
+  const [uploading, setUploading] = useState(false);
   
   useEffect(() => {
     const fetchVideos = async () => {
@@ -51,6 +67,16 @@ const CourseVideos = ({ token, user }) => {
     }
   }, [courseId, token]);
   
+  const fetchUnits = async () => {
+    try {
+      const unitsData = await getTeacherUnitsByCourse(courseId, token);
+      setUnits(unitsData);
+    } catch (err) {
+      console.error('Error fetching units:', err);
+      setUnits([]);
+    }
+  };
+  
   const handleRemoveRequest = (video) => {
     setSelectedVideo(video);
     setOpenDialog(true);
@@ -59,6 +85,107 @@ const CourseVideos = ({ token, user }) => {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setSelectedVideo(null);
+  };
+  
+  const handleOpenUploadDialog = async () => {
+    await fetchUnits();
+    setUploadData({
+      title: '',
+      description: '',
+      unitId: ''
+    });
+    setVideoFile(null);
+    setFileName('');
+    setUploadDialog(true);
+  };
+  
+  const handleCloseUploadDialog = () => {
+    setUploadDialog(false);
+  };
+  
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setUploadData({
+      ...uploadData,
+      [name]: value
+    });
+  };
+  
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Check file type
+      const validTypes = ['video/mp4', 'video/webm', 'video/ogg'];
+      if (!validTypes.includes(file.type)) {
+        setError('Please upload a valid video file (MP4, WebM, or OGG)');
+        setVideoFile(null);
+        e.target.value = null;
+        return;
+      }
+      
+      // Check file size (limit to 100MB)
+      if (file.size > 100 * 1024 * 1024) {
+        setError('File size exceeds the limit (100MB)');
+        setVideoFile(null);
+        e.target.value = null;
+        return;
+      }
+      
+      setVideoFile(file);
+      setFileName(file.name);
+      setError('');
+    }
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!uploadData.title.trim()) {
+      setError('Please enter a title for the video');
+      return;
+    }
+    
+    if (!videoFile) {
+      setError('Please select a video file to upload');
+      return;
+    }
+    
+    if (units.length > 0 && !uploadData.unitId) {
+      setError('Please select a unit');
+      return;
+    }
+    
+    try {
+      setUploading(true);
+      setError(null);
+      
+      await uploadCourseVideo(courseId, {
+        file: videoFile,
+        title: uploadData.title,
+        description: uploadData.description,
+        unitId: uploadData.unitId
+      }, token);
+      
+      // Refresh the video list
+      const data = await getCourseVideos(courseId, token);
+      setVideos(data.videos || []);
+      
+      // Close the dialog and reset form
+      setUploadDialog(false);
+      setUploadData({
+        title: '',
+        description: '',
+        unitId: ''
+      });
+      setVideoFile(null);
+      setFileName('');
+    } catch (err) {
+      console.error('Error uploading video:', err);
+      setError(err.response?.data?.message || 'Failed to upload video');
+    } finally {
+      setUploading(false);
+    }
   };
   
   if (loading) {
@@ -95,8 +222,7 @@ const CourseVideos = ({ token, user }) => {
           <Button 
             variant="contained" 
             color="primary"
-            component={Link}
-            to="/teacher/videos/upload"
+            onClick={handleOpenUploadDialog}
             startIcon={<VideoLibraryIcon />}
           >
             Upload New Video
@@ -164,6 +290,16 @@ const CourseVideos = ({ token, user }) => {
                     </Typography>
                   )}
                   
+                  {video.unitTitle && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Unit: {video.unitTitle}
+                    </Typography>
+                  )}
+                  
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Duration: {video.duration ? `${Math.floor(video.duration / 60)}:${(video.duration % 60).toString().padStart(2, '0')}` : 'Unknown'}
+                  </Typography>
+                  
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
                     <Button 
                       variant="outlined" 
@@ -213,6 +349,99 @@ const CourseVideos = ({ token, user }) => {
             onClick={handleCloseDialog}
           >
             Continue to Request
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Video Upload Dialog */}
+      <Dialog open={uploadDialog} onClose={handleCloseUploadDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Upload Video</DialogTitle>
+        <DialogContent>
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          
+          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              label="Video Title"
+              name="title"
+              value={uploadData.title}
+              onChange={handleInputChange}
+              disabled={uploading}
+            />
+            
+            <TextField
+              margin="normal"
+              fullWidth
+              label="Video Description"
+              name="description"
+              multiline
+              rows={4}
+              value={uploadData.description}
+              onChange={handleInputChange}
+              disabled={uploading}
+            />
+            
+            {units.length > 0 && (
+              <FormControl fullWidth margin="normal" required>
+                <InputLabel>Unit</InputLabel>
+                <Select
+                  name="unitId"
+                  value={uploadData.unitId}
+                  onChange={handleInputChange}
+                  label="Unit"
+                  disabled={uploading}
+                >
+                  {units.map((unit) => (
+                    <MenuItem key={unit._id} value={unit._id}>
+                      {unit.title}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+            
+            <Box sx={{ mt: 2, mb: 2 }}>
+              <input
+                accept="video/*"
+                style={{ display: 'none' }}
+                id="video-upload"
+                type="file"
+                onChange={handleFileChange}
+                disabled={uploading}
+              />
+              <label htmlFor="video-upload">
+                <Button
+                  variant="outlined"
+                  component="span"
+                  startIcon={<CloudUploadIcon />}
+                  disabled={uploading}
+                  fullWidth
+                >
+                  Select Video File
+                </Button>
+              </label>
+              {fileName && (
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  Selected file: {fileName}
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseUploadDialog} disabled={uploading}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSubmit}
+            variant="contained" 
+            color="primary"
+            disabled={uploading || !videoFile}
+            startIcon={uploading ? <CircularProgress size={20} /> : <CloudUploadIcon />}
+          >
+            {uploading ? 'Uploading...' : 'Upload'}
           </Button>
         </DialogActions>
       </Dialog>

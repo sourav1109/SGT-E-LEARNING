@@ -473,6 +473,23 @@ exports.createStudent = async (req, res) => {
       details: { name, email: normalizedEmail, regNo: studentRegNo }
     });
     
+    // Unlock the first video for each assigned course
+    const StudentProgress = require('../models/StudentProgress');
+    const Video = require('../models/Video');
+    if (Array.isArray(savedStudent.coursesAssigned)) {
+      for (const courseId of savedStudent.coursesAssigned) {
+        // Find the first video in the course
+        const firstVideo = await Video.findOne({ course: courseId }).sort({ createdAt: 1 });
+        if (firstVideo) {
+          await StudentProgress.findOneAndUpdate(
+            { student: savedStudent._id, course: courseId },
+            { $addToSet: { unlockedVideos: firstVideo._id } },
+            { upsert: true }
+          );
+        }
+      }
+    }
+
     res.status(201).json({
       _id: student._id,
       name: student.name,
@@ -1093,12 +1110,99 @@ exports.getCourseDetails = async (req, res) => {
     // Find the course with populated teachers
     const course = await Course.findById(courseId)
       .populate('teachers', 'name email teacherId')
-      .populate('videos');
+      .populate('videos')
+      .populate('units');
     
     if (!course) {
       return res.status(404).json({ message: 'Course not found' });
     }
     
+    // Get units for the course
+    const Unit = require('../models/Unit');
+    const units = await Unit.find({ course: courseId })
+      .sort('order')
+      .populate('videos', 'title description videoUrl duration sequence')
+      .populate('readingMaterials', 'title description contentType order')
+      // include questions minimally so frontend can fallback length; avoid sending answers separately endpoint provides details
+      .populate('quizzes', 'title description isActive questions')
+      .populate('quizPool', 'title description');
+    
+    // Get quiz pools for the course
+    const QuizPool = require('../models/QuizPool');
+    const Quiz = require('../models/Quiz');
+    
+    // Populate quiz pools for each unit and count questions
+    for (const unit of units) {
+      // Get quiz pools for this unit
+      const quizPools = await QuizPool.find({ 
+        unit: unit._id,
+        isActive: true 
+      })
+        .select('_id title description quizzes createdBy contributors')
+        .populate('createdBy', 'name email')
+        .populate('contributors', 'name email');
+      
+      // Add quiz pools to the unit
+      unit.quizPools = [];
+      
+      // Process each quiz pool to count questions
+      for (const pool of quizPools) {
+        // Get all quizzes in this pool
+        const quizzes = await Quiz.find({ _id: { $in: pool.quizzes } });
+        
+        // Count total questions across all quizzes
+        let questionCount = 0;
+        quizzes.forEach(quiz => {
+          questionCount += quiz.questions ? quiz.questions.length : 0;
+        });
+        
+        // Add the quiz pool with question count to the unit
+        unit.quizPools.push({
+          ...pool.toObject(),
+          questionCount: questionCount,
+          contributors: pool.contributors || [],
+          createdBy: pool.createdBy || null
+        });
+      }
+      
+      // Also ensure question count for individual quizzes (avoid extra DB call if questions already populated)
+      if (unit.quizzes && unit.quizzes.length > 0) {
+        unit.quizzes = unit.quizzes.map(q => {
+          const qObj = q.toObject ? q.toObject() : q;
+          return {
+            _id: qObj._id,
+            title: qObj.title,
+            description: qObj.description,
+            isActive: qObj.isActive,
+            questionCount: Array.isArray(qObj.questions) ? qObj.questions.length : 0
+          };
+        });
+      }
+    }
+    // Convert units to plain objects so added quizPools & quiz questionCount reliably serialized
+    const unitsResponse = units.map(u => ({
+      _id: u._id,
+      title: u.title,
+      description: u.description,
+      order: u.order,
+      videos: (u.videos || []).map(v => ({
+        _id: v._id,
+        title: v.title,
+        description: v.description,
+        videoUrl: v.videoUrl && v.videoUrl.startsWith('http') ? v.videoUrl : `${req.protocol}://${req.get('host')}/${(v.videoUrl || '').replace(/\\/g, '/')}`,
+        duration: v.duration || 0,
+        sequence: v.sequence
+      })),
+      readingMaterials: (u.readingMaterials || []).map(r => ({
+        _id: r._id,
+        title: r.title,
+        description: r.description,
+        contentType: r.contentType,
+        order: r.order
+      })),
+      quizzes: u.quizzes || [],
+      quizPools: u.quizPools || []
+    }));
     // Get students assigned to this course
     const students = await User.find({
       coursesAssigned: courseId,
@@ -1134,46 +1238,6 @@ exports.getCourseDetails = async (req, res) => {
       }
     }
     
-    // Create modules for the course content tab (placeholder data)
-    const modules = [
-      {
-        title: "Introduction to the Course",
-        description: "Overview of the course and key concepts",
-        lessons: [
-          {
-            title: "Course Overview",
-            description: "Introduction to the course structure and objectives",
-            duration: 600, // 10 minutes in seconds
-            completed: true
-          },
-          {
-            title: "Key Concepts",
-            description: "Overview of the main concepts covered in the course",
-            duration: 900, // 15 minutes in seconds
-            completed: false
-          }
-        ]
-      },
-      {
-        title: "Core Principles",
-        description: "Fundamental principles and techniques",
-        lessons: [
-          {
-            title: "Basic Principles",
-            description: "Introduction to the fundamental principles",
-            duration: 1200, // 20 minutes in seconds
-            completed: false
-          },
-          {
-            title: "Advanced Techniques",
-            description: "Exploration of advanced techniques",
-            duration: 1800, // 30 minutes in seconds
-            completed: false
-          }
-        ]
-      }
-    ];
-    
     // Construct the response
     const response = {
       _id: course._id,
@@ -1184,9 +1248,10 @@ exports.getCourseDetails = async (req, res) => {
       overallProgress,
       studentsCount: students.length,
       videosCount: course.videos.length,
+  units: unitsResponse || [],
+  hasUnits: unitsResponse && unitsResponse.length > 0,
       createdAt: course.createdAt,
-      updatedAt: course.updatedAt,
-      modules
+      updatedAt: course.updatedAt
     };
     
     res.json(response);
@@ -1197,6 +1262,18 @@ exports.getCourseDetails = async (req, res) => {
 };
 
 // Get course videos
+// Debug endpoint to check video data
+exports.debugVideos = async (req, res) => {
+  try {
+    const Video = require('../models/Video');
+    const videos = await Video.find().limit(5).select('title videoUrl duration createdAt');
+    console.log('Sample videos from database:', videos);
+    res.json(videos);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 exports.getCourseVideos = async (req, res) => {
   try {
     const courseId = req.params.id;
@@ -1245,9 +1322,9 @@ exports.getCourseVideos = async (req, res) => {
         _id: video._id,
         title: video.title,
         description: video.description,
-        url: video.videoUrl,
+        url: video.videoUrl.startsWith('http') ? video.videoUrl : `${req.protocol}://${req.get('host')}/${video.videoUrl.replace(/\\/g, '/')}`,
         thumbnail: video.thumbnail || null,
-        duration: video.duration,
+        duration: video.duration || 0,
         teacherName: video.teacher ? video.teacher.name : 'Unknown',
         uploadDate: video.createdAt,
         views,

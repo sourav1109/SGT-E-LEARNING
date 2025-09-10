@@ -22,6 +22,10 @@ import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import ForumIcon from '@mui/icons-material/Forum';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import axios from 'axios';
+import { getUnitsByCourse, createUnit } from '../../api/unitApi';
+import {
+  Dialog, DialogTitle, DialogContent, DialogActions, TextField as MuiTextField
+} from '@mui/material';
 
 const TabPanel = ({ children, value, index, ...other }) => {
   return (
@@ -48,45 +52,40 @@ const TeacherCourseDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tabValue, setTabValue] = useState(0);
+  const [units, setUnits] = useState([]);
+  const [unitDialogOpen, setUnitDialogOpen] = useState(false);
+  const [newUnitTitle, setNewUnitTitle] = useState('');
+  const [newUnitDesc, setNewUnitDesc] = useState('');
+  const [unitLoading, setUnitLoading] = useState(false);
+  const [unitError, setUnitError] = useState('');
 
   useEffect(() => {
     const fetchCourseDetails = async () => {
       try {
         setLoading(true);
-        
-        // Fetch course details
-        const courseResponse = await axios.get(`/api/teacher/courses`, {
+        // Fetch course details directly
+        const courseResponse = await axios.get(`/api/teacher/course/${courseId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        
-        const foundCourse = courseResponse.data.find(c => c._id === courseId);
-        
-        if (!foundCourse) {
-          setError('Course not found');
-          setLoading(false);
-          return;
-        }
-        
-        setCourse(foundCourse);
-        
-        // Fetch students enrolled in this course
+        setCourse(courseResponse.data);
+        // Fetch students
         const studentsResponse = await axios.get(`/api/teacher/course/${courseId}/students`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setStudents(studentsResponse.data);
-        
-        // Fetch videos for this course
+        // Fetch videos
         const videosResponse = await axios.get(`/api/teacher/course/${courseId}/videos`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setVideos(videosResponse.data);
-        
-        // Fetch forums for this course
+        // Fetch forums
         const forumsResponse = await axios.get(`/api/teacher/course/${courseId}/forums`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setForums(forumsResponse.data);
-        
+        // Fetch units
+        const unitsData = await getUnitsByCourse(courseId, token);
+        setUnits(unitsData);
         setLoading(false);
       } catch (err) {
         console.error('Error fetching course details:', err);
@@ -94,11 +93,37 @@ const TeacherCourseDetail = () => {
         setLoading(false);
       }
     };
-    
     if (token && courseId) {
       fetchCourseDetails();
     }
   }, [token, courseId]);
+
+  const handleOpenUnitDialog = () => {
+    setNewUnitTitle('');
+    setNewUnitDesc('');
+    setUnitError('');
+    setUnitDialogOpen(true);
+  };
+  const handleCloseUnitDialog = () => setUnitDialogOpen(false);
+  const handleCreateUnit = async () => {
+    if (!newUnitTitle.trim()) {
+      setUnitError('Unit title is required');
+      return;
+    }
+    setUnitLoading(true);
+    setUnitError('');
+    try {
+      await createUnit(courseId, { title: newUnitTitle, description: newUnitDesc }, token);
+      // Refresh units
+      const unitsData = await getUnitsByCourse(courseId, token);
+      setUnits(unitsData);
+      setUnitDialogOpen(false);
+    } catch (err) {
+      setUnitError(err.response?.data?.message || 'Failed to create unit');
+    } finally {
+      setUnitLoading(false);
+    }
+  };
   
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -152,7 +177,56 @@ const TeacherCourseDetail = () => {
           <Tab label="Students" icon={<PersonIcon />} iconPosition="start" />
           <Tab label="Videos" icon={<VideoLibraryIcon />} iconPosition="start" />
           <Tab label="Forums" icon={<ForumIcon />} iconPosition="start" />
+          <Tab label="Units" />
         </Tabs>
+        {/* Units Tab */}
+        <TabPanel value={tabValue} index={3}>
+          <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Units ({units.length})</Typography>
+            <Button variant="contained" color="primary" onClick={handleOpenUnitDialog}>
+              Create Unit
+            </Button>
+          </Box>
+          {units.length === 0 ? (
+            <Typography>No units created for this course yet.</Typography>
+          ) : (
+            <List>
+              {units.map(unit => (
+                <ListItem key={unit._id}>
+                  <ListItemText primary={unit.title} secondary={unit.description} />
+                </ListItem>
+              ))}
+            </List>
+          )}
+          <Dialog open={unitDialogOpen} onClose={handleCloseUnitDialog}>
+            <DialogTitle>Create New Unit</DialogTitle>
+            <DialogContent>
+              <MuiTextField
+                autoFocus
+                margin="dense"
+                label="Unit Title"
+                fullWidth
+                value={newUnitTitle}
+                onChange={e => setNewUnitTitle(e.target.value)}
+                required
+              />
+              <MuiTextField
+                margin="dense"
+                label="Description"
+                fullWidth
+                value={newUnitDesc}
+                onChange={e => setNewUnitDesc(e.target.value)}
+                multiline
+                rows={2}
+              />
+              {unitError && <Alert severity="error" sx={{ mt: 1 }}>{unitError}</Alert>}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleCloseUnitDialog}>Cancel</Button>
+              <Button onClick={handleCreateUnit} disabled={unitLoading} variant="contained">{unitLoading ? 'Creating...' : 'Create'}</Button>
+            </DialogActions>
+          </Dialog>
+        </TabPanel>
         
         <TabPanel value={tabValue} index={0}>
           <Typography variant="h6" gutterBottom>

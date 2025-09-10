@@ -20,7 +20,8 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  Chip
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
@@ -28,6 +29,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import axios from 'axios';
 import TeacherVideoDialog from '../../components/teacher/TeacherVideoDialog';
 import { formatVideoUrl } from '../../utils/videoUtils';
+import { getTeacherUnitsByCourse } from '../../api/teacherApi';
 
 const TeacherVideos = () => {
   const token = localStorage.getItem('token');
@@ -41,11 +43,13 @@ const TeacherVideos = () => {
     title: '',
     description: '',
     courseId: '',
+    unitId: '',
     file: null
   });
   const [uploadError, setUploadError] = useState('');
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [openVideoDialog, setOpenVideoDialog] = useState(false);
+  const [units, setUnits] = useState([]);
   
   useEffect(() => {
     const fetchAllVideos = async () => {
@@ -121,10 +125,16 @@ const TeacherVideos = () => {
       title: '',
       description: '',
       courseId: courses.length > 0 ? courses[0]._id : '',
+      unitId: '',
       file: null
     });
     setUploadError('');
     setOpenUploadDialog(true);
+    
+    // Fetch units for the initial course
+    if (courses.length > 0) {
+      fetchUnits(courses[0]._id);
+    }
   };
 
   const handleCloseUploadDialog = () => {
@@ -137,6 +147,26 @@ const TeacherVideos = () => {
       ...prev,
       [name]: value
     }));
+    
+    // If course changes, fetch units for that course
+    if (name === 'courseId' && value) {
+      fetchUnits(value);
+    }
+  };
+  
+  const fetchUnits = async (courseId) => {
+    try {
+      setUploadData(prev => ({
+        ...prev,
+        unitId: ''
+      }));
+      
+      const unitsData = await getTeacherUnitsByCourse(courseId, token);
+      setUnits(unitsData);
+    } catch (err) {
+      console.error('Error fetching units:', err);
+      setUnits([]);
+    }
   };
 
   const handleFileChange = (e) => {
@@ -162,6 +192,12 @@ const TeacherVideos = () => {
       return;
     }
     
+    // Check if units exist for this course and if unit is selected
+    if (units.length > 0 && !uploadData.unitId) {
+      setUploadError('Please select a unit');
+      return;
+    }
+    
     if (!uploadData.file) {
       setUploadError('Please select a video file');
       return;
@@ -175,6 +211,11 @@ const TeacherVideos = () => {
       formData.append('title', uploadData.title);
       formData.append('description', uploadData.description);
       formData.append('video', uploadData.file);
+      
+      // Append unitId if available
+      if (uploadData.unitId) {
+        formData.append('unitId', uploadData.unitId);
+      }
       
       const response = await axios.post(
         `/api/teacher/course/${uploadData.courseId}/video`, 
@@ -279,6 +320,11 @@ const TeacherVideos = () => {
                       <Typography variant="caption" color="text.secondary" display="block">
                         Course: {video.courseName} ({video.courseCode})
                       </Typography>
+                      {video.unitTitle && (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          Unit: {video.unitTitle}
+                        </Typography>
+                      )}
                       <Typography variant="caption" color="text.secondary" display="block">
                         Duration: {video.duration ? `${Math.floor(video.duration / 60)}:${video.duration % 60}` : 'Unknown'}
                       </Typography>
@@ -361,6 +407,27 @@ const TeacherVideos = () => {
                 ))}
               </Select>
             </FormControl>
+            
+            {units.length > 0 && (
+              <FormControl fullWidth margin="dense" sx={{ mb: 2 }}>
+                <InputLabel id="unit-select-label">Unit</InputLabel>
+                <Select
+                  labelId="unit-select-label"
+                  name="unitId"
+                  value={uploadData.unitId}
+                  label="Unit"
+                  onChange={handleInputChange}
+                  required
+                  disabled={uploadLoading}
+                >
+                  {units.map((unit) => (
+                    <MenuItem key={unit._id} value={unit._id}>
+                      {unit.title}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
             
             <Button
               variant="outlined"

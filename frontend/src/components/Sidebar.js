@@ -32,6 +32,7 @@ import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
+import QuizIcon from '@mui/icons-material/Quiz';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { hasPermission } from '../utils/permissions';
 
@@ -76,6 +77,7 @@ const Sidebar = ({ currentUser }) => {
   const teacherMenu = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard', permission: null, color: '#4361ee' },
     { text: 'My Courses', icon: <MdClass />, path: 'courses', permission: null, color: '#f72585' },
+    { text: 'Quizzes', icon: <QuizIcon />, path: 'quizzes', permission: null, color: '#e91e63' },
     { text: 'Videos', icon: <VideoLibraryIcon />, path: 'videos', permission: 'manage_videos', color: '#7209b7' },
     { 
       text: 'Students', 

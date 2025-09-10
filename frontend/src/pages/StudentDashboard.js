@@ -15,6 +15,7 @@ import StudentCourseProgress from './student/StudentCourseProgress';
 import StudentForumPage from './student/StudentForumPage';
 import StudentForumDetailPage from './student/StudentForumDetailPage';
 import StudentUnansweredForumsPage from './student/StudentUnansweredForumsPage';
+import StudentQuizPage from './student/StudentQuizPage';
 
 const StudentDashboard = () => {
   const token = localStorage.getItem('token');
@@ -89,6 +90,7 @@ const StudentDashboard = () => {
           <Route path="/course/:courseId/videos" element={<StudentCourseVideos />} />
           <Route path="/course/:courseId/video/:videoId" element={<StudentCourseVideos />} />
           <Route path="/course/:courseId/progress" element={<StudentCourseProgress />} />
+          <Route path="/course/:courseId/quiz/:attemptId" element={<StudentQuizPage user={currentUser} token={token} />} />
           <Route path="/forums" element={<StudentForumPage />} />
           <Route path="/forum/:forumId" element={<StudentForumDetailPage />} />
           <Route path="/unanswered-forums" element={<StudentUnansweredForumsPage />} />

@@ -24,6 +24,14 @@ const studentRoutes = require('./routes/student');
 const teacherRoutes = require('./routes/teacher');
 const discussionRoutes = require('./routes/discussion');
 const centralizedDiscussionRoutes = require('./routes/discussionRoutes');
+const quizRoutes = require('./routes/quiz');
+const quizPoolRoutes = require('./routes/quizPool');
+const unitRoutes = require('./routes/unit');
+const readingMaterialRoutes = require('./routes/readingMaterial');
+const teacherRequestRoutes = require('./routes/teacherRequest');
+
+const studentQuizAttemptRoutes = require('./routes/studentQuizAttempt');
+const unitQuizRoutes = require('./routes/unitQuiz');
 
 app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
@@ -33,9 +41,18 @@ app.use('/api/student', studentRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/discussions', discussionRoutes); // Legacy discussion route
 app.use('/api/forums', centralizedDiscussionRoutes); // New centralized forum system
+app.use('/api/quizzes', quizRoutes); // Quiz routes
+app.use('/api/quiz-pools', quizPoolRoutes); // Quiz pool routes
+app.use('/api/unit', unitRoutes); // Unit routes (mounted at /api/unit)
+app.use('/api/units', unitRoutes); // Unit routes (also mounted at /api/units for backwards compatibility)
+app.use('/api/reading-materials', readingMaterialRoutes); // Reading material routes
+app.use('/api/teacher-requests', teacherRequestRoutes);
+
+app.use('/api/student', studentQuizAttemptRoutes); // Student quiz attempt routes (delete incomplete)
+app.use('/api/student', unitQuizRoutes); // Unit quiz routes for students
 
 // Connect to MongoDB using only the .env file configuration
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('MongoDB Connected Successfully');
     

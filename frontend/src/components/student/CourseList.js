@@ -139,11 +139,11 @@ const CourseList = ({ token }) => {
                     variant="contained" 
                     color="primary"
                     component={Link}
-                    to={`/student/course/${course._id}/videos`}
+                    to={`/student/course/${course._id}/units`}
                     startIcon={<PlayCircleOutlineIcon />}
                     size="small"
                   >
-                    Videos
+                    Watch Videos
                   </Button>
                   
                   <Button 

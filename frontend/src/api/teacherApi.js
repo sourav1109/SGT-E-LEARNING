@@ -52,6 +52,13 @@ export const getTeacherCourses = async (token) => {
   return res.data;
 };
 
+export const getCourseDetails = async (courseId, token) => {
+  const res = await axios.get(`/api/teacher/course/${courseId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
 export const getCourseStudents = async (courseId, token) => {
   const res = await axios.get(`/api/teacher/course/${courseId}/students`, {
     headers: { Authorization: `Bearer ${token}` }
@@ -72,6 +79,11 @@ export const uploadCourseVideo = async (courseId, videoData, token) => {
   formData.append('video', videoData.file);
   formData.append('title', videoData.title);
   formData.append('description', videoData.description);
+  
+  // Include unitId if provided
+  if (videoData.unitId) {
+    formData.append('unitId', videoData.unitId);
+  }
   
   const res = await axios.post(`/api/teacher/course/${courseId}/video`, formData, {
     headers: { 
@@ -125,6 +137,49 @@ export const postForumReply = async (forumId, content, token) => {
   return res.data;
 };
 
+// Quiz Pool API functions for teachers
+export const createQuizPool = async (quizPoolData, token) => {
+  const res = await axios.post('/api/quiz-pools', quizPoolData, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+export const getCourseQuizPools = async (courseId, token) => {
+  const res = await axios.get(`/api/quiz-pools/course/${courseId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+export const getQuizPoolDetails = async (quizPoolId, token) => {
+  const res = await axios.get(`/api/quiz-pools/${quizPoolId}/details`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+export const addQuizToPool = async (quizPoolId, quizId, token) => {
+  const res = await axios.post(`/api/quiz-pools/${quizPoolId}/add-quiz`, { quizId }, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+export const removeQuizFromPool = async (quizPoolId, quizId, token) => {
+  const res = await axios.delete(`/api/quiz-pools/${quizPoolId}/quizzes/${quizId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+export const getQuizPoolAnalytics = async (quizPoolId, token) => {
+  const res = await axios.get(`/api/quiz-pools/${quizPoolId}/analytics`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
 // Analytics API functions for teachers
 export const getTeacherAnalyticsOverview = async (token) => {
   const res = await axios.get('/api/teacher/analytics/overview', {
@@ -156,6 +211,45 @@ export const getStudentByRegNo = async (regNo, token) => {
 
 export const getStudentDetailedAnalytics = async (studentId, token) => {
   const res = await axios.get(`/api/teacher/analytics/student/${studentId}/detailed`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+// Unit management API functions for teachers
+export const createUnitForCourse = async (courseId, unitData, token) => {
+  const res = await axios.post(`/api/teacher/course/${courseId}/unit`, {
+    ...unitData,
+    courseId: courseId
+  }, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+export const getTeacherUnitsByCourse = async (courseId, token) => {
+  const res = await axios.get(`/api/teacher/course/${courseId}/units`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+export const getTeacherUnitDetails = async (unitId, token) => {
+  const res = await axios.get(`/api/teacher/unit/${unitId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+export const updateTeacherUnit = async (unitId, unitData, token) => {
+  const res = await axios.put(`/api/teacher/unit/${unitId}`, unitData, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.data;
+};
+
+export const deleteTeacherUnit = async (unitId, token) => {
+  const res = await axios.delete(`/api/teacher/unit/${unitId}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
   return res.data;

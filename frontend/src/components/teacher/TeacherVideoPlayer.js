@@ -132,8 +132,10 @@ const TeacherVideoPlayer = ({ videoUrl, title }) => {
       // Remove visibility change listener
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-    // Only re-run when video URL changes, not on every state change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // We're intentionally excluding some dependencies like volume, playbackRate, isMuted,
+    // isPlaying, duration, and currentTime because we don't want to reinitialize the
+    // video player every time these values change
+    // eslint-disable-next-line
   }, [videoUrl]);
 
   const handleLoadedMetadata = () => {

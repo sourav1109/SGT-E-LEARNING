@@ -1,0 +1,3 @@
+### Get quiz pool questions with answers
+GET http://localhost:5000/api/quiz-pools/QUIZ_POOL_ID_HERE/questions
+Authorization: Bearer YOUR_TOKEN_HERE

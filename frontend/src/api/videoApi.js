@@ -2,7 +2,17 @@ import axios from 'axios';
 
 export const uploadVideo = async (data, token, progressCallback) => {
   const formData = new FormData();
-  Object.entries(data).forEach(([key, value]) => formData.append(key, value));
+  
+  // Explicitly handle each field to ensure unitId is included
+  formData.append('file', data.file);
+  formData.append('title', data.title);
+  formData.append('description', data.description || '');
+  formData.append('courseId', data.courseId);
+  
+  // Include unitId if it exists
+  if (data.unitId) {
+    formData.append('unitId', data.unitId);
+  }
   
   const res = await axios.post('/api/admin/video/upload', formData, {
     headers: { 

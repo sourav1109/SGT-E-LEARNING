@@ -17,6 +17,8 @@ import TeacherStudents from './teacher/TeacherStudents';
 import TeacherForums from './teacher/TeacherForums';
 import TeacherForumDetail from './teacher/TeacherForumDetail';
 import TeacherAnalytics from './teacher/TeacherAnalytics';
+import TeacherQuizzes from './teacher/TeacherQuizzes';
+import QuizAnalytics from './teacher/QuizAnalytics';
 import UnauthorizedPage from './UnauthorizedPage';
 
 const TeacherDashboard = () => {
@@ -26,7 +28,8 @@ const TeacherDashboard = () => {
   const location = useLocation();
   const [userMenuAnchor, setUserMenuAnchor] = useState(null);
 
-  if (!currentUser || currentUser.role !== 'teacher') {
+  // Allow both teacher and admin users to access the teacher dashboard
+  if (!currentUser || (currentUser.role !== 'teacher' && currentUser.role !== 'admin')) {
     return <Navigate to="/login" />;
   }
 
@@ -109,6 +112,8 @@ const TeacherDashboard = () => {
           <Route path="/students" element={<PermissionRoute element={<TeacherStudents />} permission="manage_students" />} />
           <Route path="/forums" element={<TeacherForums />} />
           <Route path="/forum/:forumId" element={<TeacherForumDetail />} />
+          <Route path="/quizzes" element={<TeacherQuizzes />} />
+          <Route path="/quiz-analytics/:quizId" element={<QuizAnalytics />} />
           {/* Redirecting student-analytics to the main analytics dashboard */}
           <Route path="/student-analytics" element={<Navigate to="/analytics" replace />} />
           <Route path="/analytics" element={<PermissionRoute element={<TeacherAnalytics viewType="course" />} permission="view_analytics" />} />

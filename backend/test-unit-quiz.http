@@ -1,0 +1,73 @@
+### Unit Quiz API Tests
+### Replace tokens and IDs with actual values from your database
+
+@baseUrl = http://localhost:5000/api/student
+@unitId = 68bffe017818abcf8b12a584
+@studentToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjp7ImlkIjoiNjhiZmZlMDE3ODE4YWJjZjhiMTJhNTc3Iiwicm9sZSI6InN0dWRlbnQifSwiaWF0IjoxNzM2NDY1Mzg4LCJleHAiOjE3MzY0Njg5ODh9.SAMPLE_TOKEN
+
+### 1. Check Quiz Availability
+GET {{baseUrl}}/unit/{{unitId}}/quiz/availability
+Authorization: Bearer {{studentToken}}
+
+### 2. Generate Unit Quiz
+POST {{baseUrl}}/unit/{{unitId}}/quiz/generate
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{}
+
+### 3. Generate Unit Quiz with destroyIncomplete flag
+POST {{baseUrl}}/unit/{{unitId}}/quiz/generate?destroyIncomplete=true
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{}
+
+### 4. Get Quiz Attempt (replace ATTEMPT_ID with actual attempt ID from step 2)
+@attemptId = ATTEMPT_ID_FROM_GENERATE_RESPONSE
+GET {{baseUrl}}/quiz/attempt/{{attemptId}}
+Authorization: Bearer {{studentToken}}
+
+### 5. Submit Quiz Attempt (replace with actual attempt ID and question IDs)
+POST {{baseUrl}}/quiz-attempt/{{attemptId}}/submit
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "answers": [
+    {
+      "questionId": "QUESTION_ID_1",
+      "selectedOption": 0
+    },
+    {
+      "questionId": "QUESTION_ID_2",
+      "selectedOption": 1
+    },
+    {
+      "questionId": "QUESTION_ID_3",
+      "selectedOption": 2
+    }
+  ]
+}
+
+### 6. Get Quiz Results (after submission)
+GET {{baseUrl}}/quiz-attempt/{{attemptId}}/results
+Authorization: Bearer {{studentToken}}
+
+### Helper: Student Login to get fresh token
+POST http://localhost:5000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "student@example.com",
+  "password": "password123"
+}
+
+### Delete Incomplete Quiz Attempt (if needed for testing)
+DELETE {{baseUrl}}/quiz-attempt/incomplete
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "unitId": "{{unitId}}"
+}

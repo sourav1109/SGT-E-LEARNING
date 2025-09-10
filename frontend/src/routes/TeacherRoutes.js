@@ -4,7 +4,7 @@ import { Box } from '@mui/material';
 import TeacherDashboard from '../components/teacher/TeacherDashboard';
 import CourseList from '../components/teacher/CourseList';
 import NotFound from '../components/common/NotFound';
-import VideoUpload from '../components/teacher/VideoUpload';
+import ContentUpload from '../components/teacher/ContentUpload';
 import CourseVideos from '../components/teacher/CourseVideos';
 import CourseStudents from '../components/teacher/CourseStudents';
 import VideoRemovalRequest from '../components/teacher/VideoRemovalRequest';
@@ -32,12 +32,12 @@ const TeacherRoutes = ({ user, token }) => {
         <Route path="/" element={<TeacherDashboard user={user} />} />
         <Route path="/courses" element={<CourseList token={token} />} />
         
-        {/* Video management routes */}
+        {/* Content management routes */}
         <Route 
           path="/videos/upload" 
           element={
             hasAccess('Manage Videos') 
-              ? <VideoUpload token={token} user={user} /> 
+              ? <ContentUpload token={token} user={user} /> 
               : <Navigate to="/teacher" replace />
           } 
         />

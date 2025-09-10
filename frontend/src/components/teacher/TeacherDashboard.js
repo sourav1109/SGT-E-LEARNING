@@ -81,18 +81,18 @@ const TeacherDashboard = ({ user }) => {
             </Card>
           </Grid>
 
-          {/* Upload Videos Card */}
+          {/* Upload Content Card */}
           <Grid item xs={12} md={6} lg={4}>
             <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <CardContent sx={{ flexGrow: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                   <CloudUploadIcon color="primary" sx={{ fontSize: 40, mr: 2 }} />
                   <Typography variant="h5" component="div">
-                    Upload Videos
+                    Upload Content
                   </Typography>
                 </Box>
                 <Typography variant="body1" color="text.secondary" paragraph>
-                  Upload new video content to your assigned courses.
+                  Upload videos and quizzes to your assigned courses.
                 </Typography>
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
                   <Button
@@ -103,7 +103,7 @@ const TeacherDashboard = ({ user }) => {
                     startIcon={<CloudUploadIcon />}
                     disabled={!hasPermission(user, 'manage_videos')}
                   >
-                    Upload Videos
+                    Upload Content
                   </Button>
                 </Box>
               </CardContent>
@@ -197,6 +197,33 @@ const TeacherDashboard = ({ user }) => {
               </Card>
             </Grid>
           )}
+          {/* Request Super Admin Card */}
+          <Grid item xs={12} md={6} lg={4}>
+            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <CardContent sx={{ flexGrow: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <PersonIcon color="warning" sx={{ fontSize: 40, mr: 2 }} />
+                  <Typography variant="h5" component="div">
+                    Request Super Admin
+                  </Typography>
+                </Box>
+                <Typography variant="body1" color="text.secondary" paragraph>
+                  Submit a request or escalation to the super admin. View your previous requests and their status.
+                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+                  <Button
+                    variant="contained"
+                    color="warning"
+                    component={Link}
+                    to="/teacher/requests"
+                    startIcon={<PersonIcon />}
+                  >
+                    Request Admin
+                  </Button>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
       </Box>
     </Container>

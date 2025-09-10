@@ -21,6 +21,9 @@ router.get('/watch-history', studentController.getStudentWatchHistory);
 // Get detailed progress for a specific course
 router.get('/course/:courseId/progress', studentController.getCourseProgress);
 
+// Get student's quiz pool attempts for a course
+router.get('/course/:courseId/quiz-pool-attempts', studentController.getStudentQuizPoolAttempts);
+
 // Connect to centralized forum system
 router.use('/discussions', require('../routes/discussionRoutes'));
 

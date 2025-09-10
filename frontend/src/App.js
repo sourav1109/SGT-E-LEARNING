@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import LoginPage from './pages/LoginPage';
@@ -11,6 +11,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import StudentDashboard from './pages/StudentDashboard';
 import PrivateRoute from './components/PrivateRoute';
+import { restoreUserFromToken } from './utils/authService';
 
 // Create a simple theme
 const theme = createTheme({
@@ -34,6 +35,9 @@ const theme = createTheme({
 });
 
 function App() {
+  useEffect(() => {
+    restoreUserFromToken();
+  }, []);
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -54,7 +58,7 @@ function App() {
         <Route 
           path="/teacher/*" 
           element={
-            <PrivateRoute allowedRoles={['teacher']}>
+            <PrivateRoute allowedRoles={['teacher', 'admin']}>
               <TeacherDashboard />
             </PrivateRoute>
           } 

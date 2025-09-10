@@ -30,11 +30,35 @@ const CourseVideos = ({ token }) => {
         setLoading(true);
         const data = await getCourseVideos(courseId, token);
         setCourse(data.course);
-        setVideos(data.videos);
+
+        // Handle both old and new API response formats
+        if (data.videos) {
+          // Original format
+          setVideos(data.videos);
+        } else if (data.units) {
+          // New unit-based format, flatten videos from all units
+          const allVideos = [];
+          data.units.forEach(unit => {
+            if (unit.videos && Array.isArray(unit.videos)) {
+              // Add unit information to each video
+              const videosWithUnitInfo = unit.videos.map(video => ({
+                ...video,
+                unitTitle: unit.title,
+                unitId: unit._id
+              }));
+              allVideos.push(...videosWithUnitInfo);
+            }
+          });
+          setVideos(allVideos);
+        } else {
+          // No videos found
+          setVideos([]);
+        }
+        
         setError(null);
       } catch (err) {
         console.error('Error fetching course videos:', err);
-        setError('Failed to load course videos');
+        setError('Failed to load course videos. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -119,6 +143,9 @@ const CourseVideos = ({ token }) => {
       <Alert severity="info" sx={{ mb: 3 }}>
         <Typography variant="body2">
           Note: Fast-forwarding is disabled to ensure you get the most out of this content.
+          {course.hasUnits && (
+            <span> This course has been organized into units. <Link to={`/student/course/${courseId}/units`}>Click here</Link> to view by units.</span>
+          )}
         </Typography>
       </Alert>
 
@@ -150,23 +177,32 @@ const CourseVideos = ({ token }) => {
                 <Typography variant="h6" gutterBottom>
                   {video.title}
                 </Typography>
+                {video.unitTitle && (
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    Unit: {video.unitTitle}
+                  </Typography>
+                )}
                 <Typography variant="body2" color="text.secondary" paragraph>
                   {video.description}
                 </Typography>
 
-                {video.watchProgress !== undefined && (
+                {(video.watchProgress !== undefined || (video.timeSpent !== undefined && video.duration)) && (
                   <Box sx={{ mt: 2, mb: 2 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                       <Typography variant="body2" color="text.secondary">
                         Watch Progress
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {video.watchProgress}%
+                        {video.watchProgress !== undefined 
+                          ? `${video.watchProgress}%` 
+                          : `${Math.min(100, Math.round((video.timeSpent / video.duration) * 100))}%`}
                       </Typography>
                     </Box>
                     <LinearProgress
                       variant="determinate"
-                      value={video.watchProgress}
+                      value={video.watchProgress !== undefined 
+                        ? video.watchProgress 
+                        : Math.min(100, Math.round((video.timeSpent / video.duration) * 100))}
                       sx={{ height: 5, borderRadius: 1 }}
                     />
                   </Box>
@@ -177,7 +213,9 @@ const CourseVideos = ({ token }) => {
                     variant="contained"
                     color="primary"
                     component={Link}
-                    to={`/student/course/${courseId}/video/${video._id}`}
+                    to={video.unitId 
+                      ? `/student/course/${courseId}/unit/${video.unitId}/video/${video._id}` 
+                      : `/student/course/${courseId}/video/${video._id}`}
                     startIcon={<PlayCircleOutlineIcon />}
                     fullWidth
                   >

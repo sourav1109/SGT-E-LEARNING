@@ -13,15 +13,19 @@ import {
   Box
 } from '@mui/material';
 import { getCourses } from '../../api/courseApi';
+import { getUnitsByCourse } from '../../api/unitApi';
 
 const VideoUploadDialog = ({ open, onClose, onUpload }) => {
-  const [form, setForm] = useState({ title: '', description: '', courseId: '' });
+  const [form, setForm] = useState({ title: '', description: '', courseId: '', unitId: '' });
   const [file, setFile] = useState(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const [courses, setCourses] = useState([]);
+  const [units, setUnits] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [selectedUnit, setSelectedUnit] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingUnits, setLoadingUnits] = useState(false);
   const token = localStorage.getItem('token');
 
   useEffect(() => {
@@ -51,22 +55,53 @@ const VideoUploadDialog = ({ open, onClose, onUpload }) => {
     setFile(e.dataTransfer.files[0]);
   };
 
-  const handleCourseChange = (event, value) => {
+  const handleCourseChange = async (event, value) => {
     setSelectedCourse(value);
+    setSelectedUnit(null);
+    setUnits([]);
+    
     if (value) {
-      setForm({ ...form, courseId: value._id });
+      setForm({ ...form, courseId: value._id, unitId: '' });
+      
+      // Fetch units for the selected course
+      setLoadingUnits(true);
+      try {
+        const unitsData = await getUnitsByCourse(value._id, token);
+        setUnits(unitsData);
+      } catch (err) {
+        console.error('Error fetching units:', err);
+      } finally {
+        setLoadingUnits(false);
+      }
     } else {
-      setForm({ ...form, courseId: '' });
+      setForm({ ...form, courseId: '', unitId: '' });
+    }
+  };
+  
+  const handleUnitChange = (event, value) => {
+    setSelectedUnit(value);
+    if (value) {
+      setForm({ ...form, unitId: value._id });
+    } else {
+      setForm({ ...form, unitId: '' });
     }
   };
 
   const handleUpload = async () => {
     setError('');
     if (!file || !form.title || !form.courseId) return setError('Title, course, and file are required');
+    
+    // Check if units are available but none selected
+    if (units.length > 0 && !form.unitId) {
+      return setError('Please select a unit');
+    }
+    
     try {
       await onUpload({ ...form, file }, setProgress);
-      setForm({ title: '', description: '', courseId: '' });
+      setForm({ title: '', description: '', courseId: '', unitId: '' });
       setSelectedCourse(null);
+      setSelectedUnit(null);
+      setUnits([]);
       setFile(null);
       setProgress(0);
       onClose();
@@ -134,6 +169,44 @@ const VideoUploadDialog = ({ open, onClose, onUpload }) => {
           noOptionsText={loading ? "Loading courses..." : "No courses found"}
         />
         
+        {selectedCourse && (
+          <Autocomplete
+            options={units}
+            getOptionLabel={(option) => option.title}
+            value={selectedUnit}
+            onChange={handleUnitChange}
+            loading={loadingUnits}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Select Unit"
+                margin="normal"
+                required
+                error={!form.unitId && units.length > 0}
+                helperText={!form.unitId && units.length > 0 ? "Unit selection is required" : ""}
+                fullWidth
+                placeholder={units.length === 0 ? "No units available" : "Search for unit"}
+              />
+            )}
+            renderOption={(props, option) => (
+              <li {...props}>
+                <Box>
+                  <Typography variant="body1">
+                    {option.title}
+                  </Typography>
+                  {option.description && (
+                    <Typography variant="body2" color="text.secondary" noWrap>
+                      {option.description.substring(0, 60)}
+                      {option.description.length > 60 ? '...' : ''}
+                    </Typography>
+                  )}
+                </Box>
+              </li>
+            )}
+            noOptionsText={loadingUnits ? "Loading units..." : "No units available"}
+          />
+        )}
+        
         <Box sx={{ mt: 3, mb: 1 }}>
           <input 
             type="file" 
@@ -171,7 +244,7 @@ const VideoUploadDialog = ({ open, onClose, onUpload }) => {
         <Button 
           onClick={handleUpload} 
           variant="contained" 
-          disabled={!file || !form.title || !form.courseId || progress > 0}
+          disabled={!file || !form.title || !form.courseId || (units.length > 0 && !form.unitId) || progress > 0}
         >
           Upload
         </Button>

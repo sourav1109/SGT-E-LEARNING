@@ -13,6 +13,19 @@ export const getCourseVideos = async (courseId, token) => {
   }
 };
 
+// Get course units with progress for student
+export const getCourseUnits = async (courseId, token) => {
+  try {
+    const response = await axios.get(`/api/unit/student/course/${courseId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching course units:', error);
+    throw error;
+  }
+};
+
 // Update watch history for a video
 export const updateWatchHistory = async (videoId, timeData, token) => {
   if (!token) {

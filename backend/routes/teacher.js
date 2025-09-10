@@ -49,11 +49,21 @@ router.use(auth, authorizeRoles('teacher'));
 // Get all courses assigned to the teacher
 router.get('/courses', teacherController.getTeacherCourses);
 
+// Get a specific course details
+router.get('/course/:courseId', teacherController.getCourseDetails);
+
 // Get students enrolled in a specific course
 router.get('/course/:courseId/students', teacherController.getCourseStudents);
 
 // Get videos for a specific course
 router.get('/course/:courseId/videos', teacherController.getCourseVideos);
+
+// Unit management routes for teachers
+router.post('/course/:courseId/unit', require('../controllers/unitController').createUnit);
+router.get('/course/:courseId/units', require('../controllers/unitController').getCourseUnits);
+router.get('/unit/:unitId', require('../controllers/unitController').getUnitById);
+router.put('/unit/:unitId', require('../controllers/unitController').updateUnit);
+router.delete('/unit/:unitId', require('../controllers/unitController').deleteUnit);
 
 // Upload a video for a course
 router.post('/course/:courseId/video', upload.single('video'), teacherController.uploadCourseVideo);
@@ -69,6 +79,9 @@ router.get('/forums', teacherController.getTeacherForums);
 
 // Get forums for a specific course
 router.get('/course/:courseId/forums', teacherController.getCourseForums);
+
+// Get quiz pools for teacher
+router.get('/quiz-pools', require('../controllers/quizPoolController').getTeacherQuizPools);
 
 // Create a new forum for a course
 router.post('/course/:courseId/forum', teacherController.createCourseForum);

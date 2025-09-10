@@ -5,6 +5,7 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const path = require('path');
 const util = require('util');
+const mongoose = require('mongoose');
 const execPromise = util.promisify(exec);
 
 // Get video duration using ffprobe
@@ -14,16 +15,22 @@ const getVideoDuration = async (filePath) => {
     const { stdout, stderr } = await execPromise(
       `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`
     );
-    
+
     if (stderr) {
-      console.error('Error getting video duration:', stderr);
+      // Only log actual errors, not just missing ffprobe
+      if (!stderr.includes('is not recognized') && !stderr.includes('command not found')) {
+        console.error('Error getting video duration:', stderr);
+      }
       return null;
     }
-    
+
     const duration = parseFloat(stdout.trim());
     return isNaN(duration) ? null : Math.round(duration);
   } catch (error) {
-    console.error('Failed to get video duration:', error.message);
+    // Don't log errors for missing ffprobe, just return null
+    if (!error.message.includes('is not recognized') && !error.message.includes('command not found')) {
+      console.error('Failed to get video duration:', error.message);
+    }
     return null;
   }
 };
@@ -31,7 +38,7 @@ const getVideoDuration = async (filePath) => {
 // Upload video
 exports.uploadVideo = async (req, res) => {
   try {
-    const { title, description, courseId } = req.body;
+    const { title, description, courseId, unitId } = req.body;
     if (!title || !courseId || !req.file) {
       return res.status(400).json({ message: 'Title, course ID, and video file are required' });
     }
@@ -40,6 +47,14 @@ exports.uploadVideo = async (req, res) => {
     const course = await Course.findById(courseId);
     if (!course) {
       return res.status(404).json({ message: 'Course not found' });
+    }
+    
+    // Check if course has units and unitId is required
+    const Unit = require('../models/Unit');
+    const unitCount = await Unit.countDocuments({ course: courseId });
+    
+    if (unitCount > 0 && (!unitId || !mongoose.Types.ObjectId.isValid(unitId))) {
+      return res.status(400).json({ message: 'Unit selection is required for this course' });
     }
     
     // Get the first teacher from the course if available
@@ -59,17 +74,111 @@ exports.uploadVideo = async (req, res) => {
       // Continue without duration
     }
     
-    const video = new Video({ 
+    // Create video document
+    const videoData = { 
       title, 
       description, 
       course: courseId, 
       teacher: teacherId, 
       videoUrl,
       duration
-    });
+    };
     
+    // If unitId is provided, associate the video with that unit
+    if (unitId && mongoose.Types.ObjectId.isValid(unitId)) {
+      // Check if the unit exists and belongs to this course
+      const Unit = require('../models/Unit');
+      const unit = await Unit.findOne({ _id: unitId, course: courseId });
+      
+      if (unit) {
+        videoData.unit = unitId;
+        videoData.sequence = unit.videos ? unit.videos.length + 1 : 1;
+      }
+    }
+    
+    const video = new Video(videoData);
     await video.save();
+    
+    // Add video to course
     await Course.findByIdAndUpdate(courseId, { $push: { videos: video._id } });
+    
+    // If video is associated with a unit, add it to that unit as well
+    let unit = null;
+    if (video.unit) {
+      const Unit = require('../models/Unit');
+      unit = await Unit.findByIdAndUpdate(video.unit, 
+        { $push: { videos: video._id } },
+        { new: true }
+      );
+      
+      // If this is the first video, also set the hasUnits flag on the course
+      await Course.findByIdAndUpdate(courseId, { $set: { hasUnits: true } });
+    }
+
+    // Unlock this video for all students assigned to this course
+    const User = require('../models/User');
+    const StudentProgress = require('../models/StudentProgress');
+    
+    // Find all students assigned to this course
+    const students = await User.find({
+      coursesAssigned: courseId,
+      role: 'student'
+    }).select('_id');
+    
+    // Unlock the video for each student and update unit progress
+    for (const student of students) {
+      try {
+        // Create or update progress record for this student
+        let progress = await StudentProgress.findOne({ 
+          student: student._id, 
+          course: courseId 
+        });
+        
+        if (!progress) {
+          // Initialize new progress record
+          progress = new StudentProgress({
+            student: student._id,
+            course: courseId,
+            unlockedVideos: [video._id],
+            units: []
+          });
+        } else {
+          // Add video to unlocked videos if not already there
+          if (!progress.unlockedVideos.includes(video._id)) {
+            progress.unlockedVideos.push(video._id);
+          }
+        }
+        
+        // If video is part of a unit, update unit progress
+        if (video.unit && unit) {
+          // Check if unit exists in progress
+          const unitIndex = progress.units.findIndex(
+            u => u.unitId && u.unitId.toString() === video.unit.toString()
+          );
+          
+          if (unitIndex === -1) {
+            // If this is the first unit (order 0), mark it as unlocked
+            const isFirstUnit = unit.order === 0;
+            
+            // Add unit to progress
+            progress.units.push({
+              unitId: video.unit,
+              status: isFirstUnit ? 'in-progress' : 'locked',
+              unlocked: isFirstUnit,
+              unlockedAt: isFirstUnit ? new Date() : null,
+              videosWatched: []
+            });
+          }
+        }
+        
+        await progress.save();
+        console.log(`Updated progress for student ${student._id} for course ${courseId}`);
+      } catch (err) {
+        console.error(`Error updating progress for student ${student._id}:`, err);
+        // Continue with next student even if there's an error
+      }
+    }
+    
     res.status(201).json(video);
   } catch (err) {
     console.error('Error uploading video:', err);
@@ -252,6 +361,8 @@ exports.getVideoAnalytics = async (req, res) => {
     const response = {
       videoId: video._id,
       videoTitle: video.title,
+      videoUrl: video.videoUrl,
+      thumbnail: video.thumbnail,
       courseTitle: video.course ? video.course.title : null,
       courseCode: video.course ? video.course.courseCode : null,
       teacherName: video.teacher ? video.teacher.name : null,

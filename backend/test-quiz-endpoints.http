@@ -1,0 +1,113 @@
+### Variables
+@baseUrl = http://localhost:5000/api
+@teacherToken = YOUR_TEACHER_TOKEN_HERE
+@studentToken = YOUR_STUDENT_TOKEN_HERE
+@adminToken = YOUR_ADMIN_TOKEN_HERE
+@courseId = YOUR_COURSE_ID_HERE
+@videoId = YOUR_VIDEO_ID_HERE
+@quizId = YOUR_QUIZ_ID_HERE
+
+### 1. Login as a teacher to get token
+# Replace with your teacher credentials
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "teacher@example.com",
+  "password": "password123"
+}
+
+### 2. Login as a student to get token
+# Replace with your student credentials
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "student@example.com",
+  "password": "password123"
+}
+
+### 3. Login as an admin to get token
+# Replace with your admin credentials
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "sourav11092002@gmail.com",
+  "password": "Admin@1234"
+}
+
+### 4. Get Teacher Courses (to get courseId)
+GET {{baseUrl}}/teacher/courses
+Authorization: Bearer {{teacherToken}}
+
+### 5. Get Course Videos (to get videoId)
+GET {{baseUrl}}/teacher/course/{{courseId}}/videos
+Authorization: Bearer {{teacherToken}}
+
+### 6. Download Quiz Template (Teacher)
+GET {{baseUrl}}/quizzes/template
+Authorization: Bearer {{teacherToken}}
+
+### 7. Upload Quiz (Teacher)
+# Note: This requires a multipart form with a CSV file
+# This can't be directly tested in a .http file - use Postman or the frontend
+# POST {{baseUrl}}/quizzes/upload
+# Authorization: Bearer {{teacherToken}}
+# Content-Type: multipart/form-data
+# 
+# form fields:
+# - file: [your CSV file]
+# - title: Sample Quiz
+# - description: A sample quiz for testing
+# - courseId: {{courseId}}
+# - videoId: {{videoId}}
+# - timeLimit: 30
+# - passingScore: 60
+
+### 8. Get Quizzes for a Course (Teacher/Student)
+GET {{baseUrl}}/quizzes/course/{{courseId}}
+Authorization: Bearer {{teacherToken}}
+
+### 9. Get Quiz for a Video (Teacher/Student)
+GET {{baseUrl}}/quizzes/video/{{videoId}}
+Authorization: Bearer {{teacherToken}}
+
+### 10. Get Quiz to Take (Student)
+GET {{baseUrl}}/quizzes/{{quizId}}/take
+Authorization: Bearer {{studentToken}}
+
+### 11. Submit Quiz Attempt (Student)
+POST {{baseUrl}}/quizzes/{{quizId}}/submit
+Authorization: Bearer {{studentToken}}
+Content-Type: application/json
+
+{
+  "answers": [
+    {
+      "questionId": "QUESTION_ID_1",
+      "selectedOption": 1
+    },
+    {
+      "questionId": "QUESTION_ID_2",
+      "selectedOption": 0
+    },
+    {
+      "questionId": "QUESTION_ID_3",
+      "selectedOption": 2
+    }
+  ],
+  "timeSpent": 600
+}
+
+### 12. Get Quiz Analytics (Teacher)
+GET {{baseUrl}}/quizzes/analytics/{{quizId}}
+Authorization: Bearer {{teacherToken}}
+
+### 13. Delete Quiz (Teacher)
+DELETE {{baseUrl}}/quizzes/{{quizId}}
+Authorization: Bearer {{teacherToken}}
+
+### 14. Get Student Quiz Results (Teacher/Student)
+GET {{baseUrl}}/quizzes/student/STUDENT_ID/results
+Authorization: Bearer {{teacherToken}}

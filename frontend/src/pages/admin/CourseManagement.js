@@ -167,7 +167,17 @@ const CourseManagement = () => {
   // Video management handlers
   const handleUploadVideo = async (data, setProgress) => {
     try {
-      await uploadVideo({ ...data }, token, setProgress);
+      // Make sure unitId is included in the upload
+      const videoData = { 
+        ...data,
+        file: data.file,
+        title: data.title,
+        description: data.description,
+        courseId: data.courseId,
+        unitId: data.unitId
+      };
+      
+      await uploadVideo(videoData, token, setProgress);
       setSnackbar('Video uploaded successfully');
       setUploadDialog(false);
       // Optionally refresh video list

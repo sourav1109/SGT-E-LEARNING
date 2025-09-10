@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { getTeacherCourses, uploadCourseVideo } from '../../api/teacherApi';
+import { getUnitsByCourse } from '../../api/unitApi';
 
 const VideoUpload = ({ token, user }) => {
   const [courses, setCourses] = useState([]);
@@ -28,6 +29,28 @@ const VideoUpload = ({ token, user }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [fileName, setFileName] = useState('');
+  const [units, setUnits] = useState([]);
+  const [selectedUnit, setSelectedUnit] = useState('');
+  // Fetch units when course changes
+  useEffect(() => {
+    const fetchUnits = async () => {
+      if (!selectedCourse) {
+        setUnits([]);
+        setSelectedUnit('');
+        return;
+      }
+      try {
+        const token = localStorage.getItem('token');
+        const data = await getUnitsByCourse(selectedCourse, token);
+        setUnits(data);
+        setSelectedUnit('');
+      } catch (err) {
+        setUnits([]);
+        setSelectedUnit('');
+      }
+    };
+    fetchUnits();
+  }, [selectedCourse]);
   
   useEffect(() => {
     const fetchCourses = async () => {
@@ -90,23 +113,26 @@ const VideoUpload = ({ token, user }) => {
       return;
     }
     
+    if (!selectedUnit) {
+      setError('Please select a unit');
+      return;
+    }
     try {
       setLoading(true);
       setError('');
       setSuccess('');
-      
       await uploadCourseVideo(selectedCourse, {
         file: videoFile,
         title: videoTitle,
-        description: videoDescription
+        description: videoDescription,
+        unitId: selectedUnit
       }, token);
-      
       // Clear form after successful upload
       setVideoFile(null);
       setVideoTitle('');
       setVideoDescription('');
       setFileName('');
-      
+      setSelectedUnit('');
       setSuccess('Video uploaded successfully!');
     } catch (err) {
       console.error('Error uploading video:', err);
@@ -167,6 +193,27 @@ const VideoUpload = ({ token, user }) => {
                 </Select>
               </FormControl>
             </Grid>
+            {selectedCourse && (
+              <Grid item xs={12}>
+                <FormControl fullWidth required>
+                  <InputLabel>Select Unit</InputLabel>
+                  <Select
+                    value={selectedUnit}
+                    onChange={(e) => setSelectedUnit(e.target.value)}
+                    label="Select Unit"
+                    disabled={loading || units.length === 0}
+                  >
+                    {units.length === 0 ? (
+                      <MenuItem value="" disabled>No units available</MenuItem>
+                    ) : (
+                      units.map((unit) => (
+                        <MenuItem key={unit._id} value={unit._id}>{unit.title}</MenuItem>
+                      ))
+                    )}
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
             
             <Grid item xs={12}>
               <TextField

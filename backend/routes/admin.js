@@ -11,7 +11,11 @@ const analyticsController = require('../controllers/analyticsController');
 const discussionController = require('../controllers/discussionController');
 const forumController = require('../controllers/forumController');
 const settingController = require('../controllers/settingController');
+const unitController = require('../controllers/unitController');
 const { authorizePermissions } = require('../middleware/auth');
+
+// Debug route (no auth for testing)
+router.get('/debug/videos', adminController.debugVideos);
 
 // All routes protected by admin role
 router.use(auth, authorizeRoles('admin'));
@@ -64,6 +68,10 @@ router.delete('/student/:id', adminController.removeStudent);
 router.post('/course', adminController.createCourse);
 router.patch('/course/:id', adminController.editCourse);
 router.delete('/course/:id', adminController.deleteCourse);
+
+// Unit management
+router.post('/course/:id/unit', require('../controllers/unitController').createUnit);
+router.get('/course/:id/units', require('../controllers/unitController').getCourseUnits);
 
 // Course details, videos, and students - new endpoints
 router.get('/course/:id/details', adminController.getCourseDetails);
