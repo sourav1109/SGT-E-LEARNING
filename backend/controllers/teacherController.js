@@ -374,36 +374,32 @@ exports.getForumDiscussion = async (req, res) => {
         select: 'title teachers'
       })
       .populate({
-        path: 'posts.author',
+        path: 'replies.user',
         select: 'name role'
       });
     
     if (!discussion) {
       // For debugging purposes
       console.log('Forum not found with ID:', forumId);
-      
       // Try to find if any forums exist
       const allForums = await Discussion.find({}).select('_id title');
       console.log('Available forums:', allForums);
-      
       return res.status(404).json({ message: 'Forum not found' });
     }
-    
     // Check if course field exists
     if (!discussion.course) {
       console.log('Course field missing for forum:', forumId);
-      
       // Create default response when course is missing
       return res.json({
         _id: discussion._id,
         title: discussion.title || 'Untitled Forum',
         description: discussion.description || 'Course discussion forum',
-        posts: discussion.posts?.map(post => ({
-          _id: post._id,
-          author: post.author?.name || 'Unknown User',
-          authorRole: post.author?.role || 'unknown',
-          content: post.content || '',
-          date: post.timestamp || new Date()
+        replies: discussion.replies?.map(reply => ({
+          _id: reply._id,
+          author: reply.user?.name || 'Unknown User',
+          authorRole: reply.user?.role || 'unknown',
+          content: reply.content || '',
+          date: reply.createdAt || new Date()
         })) || []
       });
     }
@@ -414,43 +410,38 @@ exports.getForumDiscussion = async (req, res) => {
                              discussion.course.teachers.some(teacherId => 
                                teacherId.toString() === req.user._id.toString()
                              );
-    
     if (!isTeacherAssigned) {
       console.log('Teacher not authorized. Teacher ID:', req.user._id);
       console.log('Course teachers:', discussion.course.teachers);
-      
       // For debugging, temporarily remove the authorization check
       // In production, this should be uncommented
       // return res.status(403).json({ message: 'Not authorized to access this forum' });
     }
-    
     // Format the response
-    const formattedPosts = Array.isArray(discussion.posts) ? discussion.posts.map(post => {
-      // Handle case where author might be missing
-      if (!post.author) {
+    const formattedReplies = Array.isArray(discussion.replies) ? discussion.replies.map(reply => {
+      // Handle case where user might be missing
+      if (!reply.user) {
         return {
-          _id: post._id,
+          _id: reply._id,
           author: 'Unknown User',
           authorRole: 'unknown',
-          content: post.content || '',
-          date: post.timestamp || new Date()
+          content: reply.content || '',
+          date: reply.createdAt || new Date()
         };
       }
-      
       return {
-        _id: post._id,
-        author: post.author.name,
-        authorRole: post.author.role,
-        content: post.content,
-        date: post.timestamp
+        _id: reply._id,
+        author: reply.user.name,
+        authorRole: reply.user.role,
+        content: reply.content,
+        date: reply.createdAt
       };
     }) : [];
-    
     res.json({
       _id: discussion._id,
       title: discussion.title,
       description: discussion.description || 'Course discussion forum',
-      posts: formattedPosts
+      replies: formattedReplies
     });
   } catch (err) {
     console.error('Error getting forum discussion:', err);

@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const BASE_URL = '/api/forums';
+const TEACHER_BASE_URL = '/api/teacher/forum';
 
 const getAuthHeader = () => {
   const token = localStorage.getItem('token');
@@ -51,11 +52,16 @@ export const getCourseDiscussions = async (courseId, page = 1, limit = 10) => {
   }
 };
 
-// Get a specific discussion with replies
-export const getDiscussion = async (discussionId) => {
+// Get a specific discussion with replies (for teacher)
+export const getDiscussion = async (discussionId, isTeacher = true) => {
   try {
-    const res = await axios.get(`${BASE_URL}/${discussionId}`, getAuthHeader());
-    return res.data;
+    if (isTeacher) {
+      const res = await axios.get(`${TEACHER_BASE_URL}/${discussionId}`, getAuthHeader());
+      return res.data;
+    } else {
+      const res = await axios.get(`${BASE_URL}/${discussionId}`, getAuthHeader());
+      return res.data;
+    }
   } catch (error) {
     throw error;
   }

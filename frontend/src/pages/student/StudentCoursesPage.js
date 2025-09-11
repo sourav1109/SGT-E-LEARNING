@@ -144,6 +144,13 @@ const StudentCoursesPage = () => {
                   >
                     View Progress
                   </Button>
+                  <Button 
+                    size="small" 
+                    color="success"
+                    onClick={() => navigate(`/student/course/${course._id}/chat`)}
+                  >
+                    Chat
+                  </Button>
                 </CardActions>
               </Card>
             </Grid>

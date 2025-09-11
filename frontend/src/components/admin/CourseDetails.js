@@ -39,8 +39,10 @@ import {
   Warning as WarningIcon,
   ArrowBack as ArrowBackIcon,
   BarChart as BarChartIcon,
-  OndemandVideo as OndemandVideoIcon
+  OndemandVideo as OndemandVideoIcon,
+  Forum as ForumIcon
 } from '@mui/icons-material';
+import AdminCourseChatTab from './AdminCourseChatTab';
 
 import { getCourseDetails, getCourseVideos, getCourseStudents } from '../../api/courseApi';
 import { getVideoAnalytics } from '../../api/videoApi';
@@ -404,7 +406,12 @@ const CourseDetails = ({ courseId, onBack, token }) => {
           <Tab icon={<PersonIcon />} iconPosition="start" label="Students" />
           <Tab icon={<VideoIcon />} iconPosition="start" label="Videos" />
           <Tab icon={<SchoolIcon />} iconPosition="start" label="Content" />
+          <Tab icon={<ForumIcon />} iconPosition="start" label="Chat" />
         </Tabs>
+      {/* Chat Tab */}
+      <TabPanel value={tabValue} index={3}>
+        <AdminCourseChatTab courseId={courseId} />
+      </TabPanel>
       </Box>
 
       {/* Students Tab */}

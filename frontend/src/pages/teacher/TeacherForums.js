@@ -1,3 +1,4 @@
+// File removed for new group chat forum implementation.
 import React, { useState, useEffect } from 'react';
 import { 
   Typography, 

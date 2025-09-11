@@ -16,6 +16,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Import routes
+
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
 const roleRoutes = require('./routes/role');
@@ -25,6 +26,8 @@ const teacherRoutes = require('./routes/teacher');
 const discussionRoutes = require('./routes/discussion');
 const centralizedDiscussionRoutes = require('./routes/discussionRoutes');
 const announcementRoutes = require('./routes/announcement');
+const courseChatRoutes = require('./routes/courseChat');
+
 
 app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
@@ -35,6 +38,7 @@ app.use('/api/teacher', teacherRoutes);
 app.use('/api/discussions', discussionRoutes); // Legacy discussion route
 app.use('/api/forums', centralizedDiscussionRoutes); // New centralized forum system
 app.use('/api/announcement', announcementRoutes); // Generic announcement route
+app.use('/api', courseChatRoutes); // Course group chat API
 
 // Connect to MongoDB using only the .env file configuration
 mongoose.connect(process.env.MONGO_URI)

@@ -15,9 +15,7 @@ import StudentHomeDashboard from './student/StudentHomeDashboard';
 import StudentCoursesPage from './student/StudentCoursesPage';
 import StudentCourseVideos from './student/StudentCourseVideos';
 import StudentCourseProgress from './student/StudentCourseProgress';
-import StudentForumPage from './student/StudentForumPage';
-import StudentForumDetailPage from './student/StudentForumDetailPage';
-import StudentUnansweredForumsPage from './student/StudentUnansweredForumsPage';
+import StudentCourseChatPage from './student/StudentCourseChatPage';
 
 const StudentDashboard = () => {
   const token = localStorage.getItem('token');
@@ -178,9 +176,7 @@ const StudentDashboard = () => {
           <Route path="/course/:courseId/videos" element={<StudentCourseVideos />} />
           <Route path="/course/:courseId/video/:videoId" element={<StudentCourseVideos />} />
           <Route path="/course/:courseId/progress" element={<StudentCourseProgress />} />
-          <Route path="/forums" element={<StudentForumPage />} />
-          <Route path="/forum/:forumId" element={<StudentForumDetailPage />} />
-          <Route path="/unanswered-forums" element={<StudentUnansweredForumsPage />} />
+          <Route path="/course/:courseId/chat" element={<StudentCourseChatPage />} />
           <Route path="/announcements" element={<AnnouncementPage role="student" />} />
           <Route path="*" element={<Navigate to="/student/dashboard" replace />} />
         </Routes>

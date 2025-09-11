@@ -1,3 +1,4 @@
+// File removed for new group chat forum implementation.
 import React, { useState, useEffect } from 'react';
 import { 
   Typography, 
@@ -39,7 +40,7 @@ const TeacherForumDetail = () => {
       try {
         setLoading(true);
         // Use the centralized forum API instead of direct axios call
-        const data = await forumApi.getDiscussion(forumId);
+  const data = await forumApi.getDiscussion(forumId, true);
         setForum(data);
         setLoading(false);
       } catch (err) {
