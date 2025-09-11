@@ -8,7 +8,6 @@ import {
   Tooltip,
   CircularProgress,
   Dialog,
-  DialogContent,
   AppBar,
   Toolbar,
   Container
@@ -253,34 +252,6 @@ const TeacherVideoPlayer = ({ videoUrl, title }) => {
     if (!isNaN(videoDuration) && videoDuration > 0 && Math.abs(duration - videoDuration) > 1) {
       setDuration(videoDuration);
     }
-  };
-
-  const handleVideoError = (e) => {
-    console.error('Video error:', e);
-    
-    // Get specific error information
-    const video = videoRef.current;
-    if (video) {
-      const errorCode = video.error ? video.error.code : 0;
-      const errorMessages = {
-        1: 'Video loading aborted',
-        2: 'Network error while loading video',
-        3: 'Video decoding failed',
-        4: 'Video not supported by your browser'
-      };
-      const errorMessage = errorMessages[errorCode] || 'Unknown video error';
-      console.error(`Video error details: Code ${errorCode}, Message: ${errorMessage}`);
-      
-      if (!videoUrl) {
-        setError('No video URL provided');
-      } else {
-        setError(`Error loading video: ${errorMessage}. URL: ${videoUrl}`);
-      }
-    } else {
-      setError('Error loading video. Please try again later.');
-    }
-    
-    setLoading(false);
   };
 
   const togglePlay = () => {

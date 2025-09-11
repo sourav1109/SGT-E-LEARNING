@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Box, Typography, Button, Grid, Paper, TextField, Alert } from '@mui/material';
 import TeacherVideoPlayer from '../../components/teacher/TeacherVideoPlayer';
 import { formatVideoUrl } from '../../utils/videoUtils';
@@ -9,12 +9,12 @@ const TestVideoPage = () => {
   const [testResults, setTestResults] = useState([]);
   
   // List of known videos in the uploads folder
-  const knownVideos = [
+  const knownVideos = useMemo(() => [
     '7bdd6cb5b415d9cdd7d31f5388f9067f',
     '9c5f9f0b1562d968d2aa1c7191e988f4',
     'ba7d0266a35a46eeeee9733d5303c72b',
     'd61931fb2c0e2f37893d11689351bcc7'
-  ];
+  ], []);
 
   // Test the direct access to each video
   useEffect(() => {
@@ -46,7 +46,7 @@ const TestVideoPage = () => {
     };
     
     testDirectAccess();
-  }, []);
+  }, [knownVideos]);
 
   const handleCustomUrlChange = (e) => {
     setCustomUrl(e.target.value);
