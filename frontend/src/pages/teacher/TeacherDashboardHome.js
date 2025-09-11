@@ -1,39 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Grid, Typography, Paper, Card, CardContent, CircularProgress, Alert, Chip, Box, List, ListItem, ListItemIcon, ListItemText, Divider } from '@mui/material';
+import { Grid, Typography, Paper, Card, CardContent, CircularProgress, Alert, List, ListItem, ListItemIcon, ListItemText, Divider } from '@mui/material';
 import axios from 'axios';
 import { parseJwt } from '../../utils/jwt';
-import { hasPermission } from '../../utils/permissions';
-import PeopleIcon from '@mui/icons-material/People';
-import SchoolIcon from '@mui/icons-material/School';
+
+
 import { MdClass } from 'react-icons/md';
-import BarChartIcon from '@mui/icons-material/BarChart';
-import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CancelIcon from '@mui/icons-material/Cancel';
 
-// Helper function to get permission label
-const getPermissionLabel = (permission) => {
-  switch(permission) {
-    case 'manage_teachers': return 'Manage Teachers';
-    case 'manage_students': return 'Manage Students';
-    case 'manage_courses': return 'Manage Courses';
-    case 'manage_videos': return 'Manage Videos';
-    // Analytics label removed
-    default: return permission;
-  }
-};
 
-// Helper function to get permission icon
-const getPermissionIcon = (permission) => {
-  switch(permission) {
-    case 'manage_teachers': return <PeopleIcon />;
-    case 'manage_students': return <SchoolIcon />;
-    case 'manage_courses': return <MdClass />;
-    case 'manage_videos': return <VideoLibraryIcon />;
-    // Analytics icon removed
-    default: return null;
-  }
-};
+
 
 const TeacherDashboardHome = () => {
   const token = localStorage.getItem('token');
@@ -48,14 +22,7 @@ const TeacherDashboardHome = () => {
   });
   const [courses, setCourses] = useState([]);
 
-  // Define available permissions
-  const allPermissions = [
-    'manage_teachers',
-    'manage_students',
-    'manage_courses',
-    'manage_videos'
-    // 'view_analytics' removed from dashboard
-  ];
+
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -171,48 +138,7 @@ const TeacherDashboardHome = () => {
             </Card>
           </Grid>
           
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 3, height: '100%' }}>
-              <Typography variant="h6" gutterBottom>
-                Your Permissions
-              </Typography>
-              
-              {/* Debug section to show raw permissions */}
-              <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                <Typography variant="subtitle2">Debug - Raw Permissions:</Typography>
-                <pre style={{ overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
-                  {JSON.stringify(currentUser.permissions || [], null, 2)}
-                </pre>
-                <Typography variant="subtitle2" sx={{ mt: 2 }}>User Object:</Typography>
-                <pre style={{ overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
-                  {JSON.stringify(currentUser || {}, null, 2)}
-                </pre>
-              </Box>
-              
-              <List>
-                {allPermissions.map(permission => (
-                  <ListItem key={permission}>
-                    <ListItemIcon>
-                      {hasPermission(currentUser, permission)
-                        ? <CheckCircleIcon color="success" /> 
-                        : <CancelIcon color="disabled" />}
-                    </ListItemIcon>
-                    <ListItemText 
-                      primary={getPermissionLabel(permission)}
-                      secondary={hasPermission(currentUser, permission)
-                        ? "You have access to this feature" 
-                        : "You don't have access to this feature"}
-                      primaryTypographyProps={{
-                        color: hasPermission(currentUser, permission)
-                          ? 'text.primary' 
-                          : 'text.disabled'
-                      }}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          </Grid>
+          
           
           <Grid item xs={12} md={6}>
             <Paper sx={{ p: 3, height: '100%' }}>
