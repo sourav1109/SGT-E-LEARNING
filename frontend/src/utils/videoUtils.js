@@ -4,17 +4,64 @@
  * @returns {string} Properly formatted video URL
  */
 export const formatVideoUrl = (videoUrl) => {
-  if (!videoUrl) return '';
+  console.log('Original video URL:', videoUrl);
+  
+  if (!videoUrl) {
+    console.error('No video URL provided to formatVideoUrl');
+    return '';
+  }
   
   // If the URL already starts with http, return it as is
   if (videoUrl.startsWith('http')) {
+    console.log('Video URL is already absolute:', videoUrl);
     return videoUrl;
   }
   
-  // Otherwise prepend the backend URL
-  // Ensure the URL is properly formatted (handle both /uploads/file.mp4 and uploads/file.mp4 formats)
-  const formattedUrl = videoUrl.startsWith('/') ? videoUrl : `/${videoUrl}`;
-  return `http://localhost:5000${formattedUrl}`;
+  // Try to test if this is one of our known files by direct filename
+  // These are the files we saw in the uploads directory from our test
+  const knownVideos = [
+    '7bdd6cb5b415d9cdd7d31f5388f9067f',
+    '9c5f9f0b1562d968d2aa1c7191e988f4',
+    'ba7d0266a35a46eeeee9733d5303c72b',
+    'd61931fb2c0e2f37893d11689351bcc7'
+  ];
+  
+  // If videoUrl is just a filename (no path) and it's one of our known files
+  if (knownVideos.includes(videoUrl) && !videoUrl.includes('/')) {
+    console.log('Known video file detected, using direct path');
+    const directUrl = `http://localhost:5000/uploads/${videoUrl}`;
+    console.log('Direct URL:', directUrl);
+    return directUrl;
+  }
+  
+  // Handle different formats of relative URLs
+  let formattedUrl;
+  
+  if (videoUrl.startsWith('/uploads/')) {
+    // Already has /uploads/ prefix with leading slash
+    formattedUrl = videoUrl;
+  } else if (videoUrl.startsWith('uploads/')) {
+    // Has uploads/ prefix without leading slash, but make sure we don't duplicate it
+    if (videoUrl.includes('uploads/uploads/')) {
+      // Fix duplicated uploads path
+      formattedUrl = `/${videoUrl.replace('uploads/uploads/', 'uploads/')}`;
+    } else {
+      formattedUrl = `/${videoUrl}`;
+    }
+  } else {
+    // Doesn't have uploads prefix at all - add it
+    formattedUrl = `/uploads/${videoUrl}`;
+  }
+  
+  // Check for and fix double uploads paths
+  if (formattedUrl.includes('/uploads/uploads/')) {
+    formattedUrl = formattedUrl.replace('/uploads/uploads/', '/uploads/');
+  }
+  
+  // Prepend the backend URL
+  const fullUrl = `http://localhost:5000${formattedUrl}`;
+  console.log('Final formatted video URL:', fullUrl);
+  return fullUrl;
 };
 
 /**

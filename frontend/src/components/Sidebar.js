@@ -2,11 +2,9 @@ import React from 'react';
 import { 
   Drawer, 
   List, 
-  ListItem, 
   ListItemIcon, 
   ListItemText, 
   Toolbar, 
-  Divider,
   Collapse,
   ListItemButton,
   Box,
@@ -19,7 +17,7 @@ import {
 import PeopleIcon from '@mui/icons-material/People';
 import SchoolIcon from '@mui/icons-material/School';
 import { MdClass } from 'react-icons/md';
-import BarChartIcon from '@mui/icons-material/BarChart';
+// import BarChartIcon from '@mui/icons-material/BarChart';
 import InsightsIcon from '@mui/icons-material/Insights';
 import ForumIcon from '@mui/icons-material/Forum';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
@@ -31,7 +29,7 @@ import FlagIcon from '@mui/icons-material/Flag';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import AssessmentIcon from '@mui/icons-material/Assessment';
-import PersonSearchIcon from '@mui/icons-material/PersonSearch';
+// import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { hasPermission } from '../utils/permissions';
@@ -105,13 +103,6 @@ const Sidebar = ({ currentUser }) => {
     { text: 'My Courses', icon: <MdClass />, path: 'courses', color: '#f72585' },
     { text: 'Videos', icon: <VideoLibraryIcon />, path: 'videos', color: '#7209b7' },
     { text: 'Forums', icon: <ForumIcon />, path: 'forums', color: '#ff9e00' },
-    { 
-      text: 'Unanswered Forums', 
-      icon: <QuestionAnswerIcon />, 
-      path: 'unanswered-forums', 
-      color: '#fb8500',
-      isNew: true 
-    },
   ];
   
   // Select menu based on user role

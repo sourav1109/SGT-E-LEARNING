@@ -55,6 +55,9 @@ router.get('/course/:courseId/students', teacherController.getCourseStudents);
 // Get videos for a specific course
 router.get('/course/:courseId/videos', teacherController.getCourseVideos);
 
+// Get a specific video by ID
+router.get('/video/:videoId', teacherController.getVideoById);
+
 // Upload a video for a course
 router.post('/course/:courseId/video', upload.single('video'), teacherController.uploadCourseVideo);
 

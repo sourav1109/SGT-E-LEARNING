@@ -22,7 +22,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import SendIcon from '@mui/icons-material/Send';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import * as forumApi from '../../api/forumApi';
+// ...existing code...
 
 const TeacherForumDetail = () => {
   const { forumId } = useParams();
