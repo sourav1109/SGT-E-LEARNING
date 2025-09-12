@@ -64,6 +64,8 @@ router.get('/course/:courseId/units', require('../controllers/unitController').g
 router.get('/unit/:unitId', require('../controllers/unitController').getUnitById);
 router.put('/unit/:unitId', require('../controllers/unitController').updateUnit);
 router.delete('/unit/:unitId', require('../controllers/unitController').deleteUnit);
+// Get a specific video by ID
+router.get('/video/:videoId', teacherController.getVideoById);
 
 // Upload a video for a course
 router.post('/course/:courseId/video', upload.single('video'), teacherController.uploadCourseVideo);

@@ -15,12 +15,16 @@ import {
   ListItemText,
   ListItemAvatar,
   Avatar,
-  Grid
+  Grid,
+  Card,
+  CardContent,
+  CardMedia
 } from '@mui/material';
 import PersonIcon from '@mui/icons-material/Person';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import ForumIcon from '@mui/icons-material/Forum';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import axios from 'axios';
 import { getUnitsByCourse, createUnit } from '../../api/unitApi';
 import {
@@ -281,7 +285,7 @@ const TeacherCourseDetail = () => {
             <Button 
               variant="contained" 
               color="primary"
-              onClick={() => alert('Upload video functionality not implemented yet')}
+              onClick={() => navigate('/teacher/videos/upload')}
             >
               Upload New Video
             </Button>
@@ -293,19 +297,71 @@ const TeacherCourseDetail = () => {
             <Grid container spacing={3}>
               {videos.map((video) => (
                 <Grid item xs={12} md={6} lg={4} key={video._id}>
-                  <Paper sx={{ p: 2 }}>
-                    <Typography variant="h6" gutterBottom>
-                      {video.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" paragraph>
-                      {video.description || 'No description'}
-                    </Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-                      <Button variant="outlined" size="small">
-                        View
+                  <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    <CardMedia
+                      component="div"
+                      sx={{
+                        pt: '56.25%', // 16:9 aspect ratio
+                        position: 'relative',
+                        cursor: 'pointer',
+                        bgcolor: 'black'
+                      }}
+                      onClick={() => navigate(`/teacher/video/${video._id}`)}
+                    >
+                      {video.thumbnailUrl ? (
+                        <img 
+                          src={video.thumbnailUrl} 
+                          alt={video.title}
+                          style={{ 
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover'
+                          }}
+                        />
+                      ) : (
+                        <Box sx={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          bgcolor: 'rgba(0,0,0,0.4)'
+                        }}>
+                          <VideoLibraryIcon sx={{ fontSize: 60, opacity: 0.7, color: 'white' }} />
+                        </Box>
+                      )}
+                    </CardMedia>
+                    <CardContent sx={{ flexGrow: 1 }}>
+                      <Typography variant="h6" gutterBottom>
+                        {video.title}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" paragraph>
+                        {video.description || 'No description'}
+                      </Typography>
+                      {video.duration && (
+                        <Typography variant="body2" color="text.secondary">
+                          Duration: {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
+                        </Typography>
+                      )}
+                    </CardContent>
+                    <Box sx={{ p: 2, pt: 0, display: 'flex', justifyContent: 'space-between' }}>
+                      <Button 
+                        variant="contained" 
+                        size="small" 
+                        color="primary"
+                        onClick={() => navigate(`/teacher/video/${video._id}`)}
+                        startIcon={<PlayCircleOutlineIcon />}
+                      >
+                        Watch
                       </Button>
                     </Box>
-                  </Paper>
+                  </Card>
                 </Grid>
               ))}
             </Grid>
