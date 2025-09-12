@@ -57,8 +57,6 @@ router.get('/course/:courseId/students', teacherController.getCourseStudents);
 
 // Get videos for a specific course
 router.get('/course/:courseId/videos', teacherController.getCourseVideos);
-
-
 // Unit management routes for teachers
 router.post('/course/:courseId/unit', require('../controllers/unitController').createUnit);
 router.get('/course/:courseId/units', require('../controllers/unitController').getCourseUnits);

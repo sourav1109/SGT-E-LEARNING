@@ -20,7 +20,6 @@ import StudentForumPage from './student/StudentForumPage';
 import StudentForumDetailPage from './student/StudentForumDetailPage';
 import StudentQuizPage from './student/StudentQuizPage';
 
-
 const StudentDashboard = () => {
   const token = localStorage.getItem('token');
   const currentUser = parseJwt(token);
