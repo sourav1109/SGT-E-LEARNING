@@ -8,9 +8,7 @@ import ContentUpload from '../components/teacher/ContentUpload';
 import CourseVideos from '../components/teacher/CourseVideos';
 import CourseStudents from '../components/teacher/CourseStudents';
 import VideoRemovalRequest from '../components/teacher/VideoRemovalRequest';
-import CourseForums from '../components/teacher/CourseForums';
-import ForumsList from '../components/teacher/ForumsList';
-import ForumDiscussion from '../components/teacher/ForumDiscussion';
+// ...existing code...
 import TeacherStudents from '../pages/teacher/TeacherStudents';
 import TeacherEnhancedAnalytics from '../pages/teacher/TeacherEnhancedAnalytics';
 import TeacherAnalyticsFixed from '../components/teacher/TeacherAnalyticsFixed';
@@ -45,7 +43,7 @@ const TeacherRoutes = ({ user, token }) => {
         <Route path="/video/:videoId/remove-request" element={<VideoRemovalRequest token={token} user={user} />} />
         
         {/* Student management routes */}
-        <Route 
+        <Route [eslint] Plugin "react-hooks" was conflicted between ".eslintrc.json" and ".eslintrc.json » eslint-config-react-app".
           path="/course/:courseId/students" 
           element={
             hasAccess('Manage Students') 
@@ -55,10 +53,7 @@ const TeacherRoutes = ({ user, token }) => {
         />
         <Route path="/students" element={<TeacherStudents token={token} user={user} />} />
         
-        {/* Forum routes */}
-        <Route path="/forums" element={<ForumsList token={token} user={user} />} />
-        <Route path="/course/:courseId/forums" element={<CourseForums token={token} user={user} />} />
-        <Route path="/forum/:forumId" element={<ForumDiscussion token={token} user={user} />} />
+  {/* Forum routes removed */}
         
         {/* Analytics route - Using fixed analytics as the main analytics page */}
         <Route 

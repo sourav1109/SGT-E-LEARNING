@@ -28,10 +28,13 @@ exports.getNotifications = async (req, res) => {
 exports.getUnreadCount = async (req, res) => {
   try {
     const count = await Notification.countDocuments({ recipient: req.user._id, read: false });
-  console.log(`Unread count for user ${req.user?._id}: ${count}`);
+    // Only log if count is non-zero to reduce noise
+    if (count > 0) {
+      console.log(`Unread count for user ${req.user?._id}: ${count}`);
+    }
     res.json({ unread: count });
   } catch (err) {
-  console.error('getUnreadCount error:', err.message);
+    console.error('getUnreadCount error:', err.message);
     res.status(500).json({ error: err.message });
   }
 };

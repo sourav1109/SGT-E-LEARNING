@@ -58,12 +58,15 @@ router.get('/course/:courseId/students', teacherController.getCourseStudents);
 // Get videos for a specific course
 router.get('/course/:courseId/videos', teacherController.getCourseVideos);
 
+
 // Unit management routes for teachers
 router.post('/course/:courseId/unit', require('../controllers/unitController').createUnit);
 router.get('/course/:courseId/units', require('../controllers/unitController').getCourseUnits);
 router.get('/unit/:unitId', require('../controllers/unitController').getUnitById);
 router.put('/unit/:unitId', require('../controllers/unitController').updateUnit);
 router.delete('/unit/:unitId', require('../controllers/unitController').deleteUnit);
+// Get a specific video by ID
+router.get('/video/:videoId', teacherController.getVideoById);
 
 // Upload a video for a course
 router.post('/course/:courseId/video', upload.single('video'), teacherController.uploadCourseVideo);

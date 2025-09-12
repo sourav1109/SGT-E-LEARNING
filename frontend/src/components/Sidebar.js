@@ -2,11 +2,9 @@ import React from 'react';
 import { 
   Drawer, 
   List, 
-  ListItem, 
   ListItemIcon, 
   ListItemText, 
   Toolbar, 
-  Divider,
   Collapse,
   ListItemButton,
   Box,
@@ -19,11 +17,12 @@ import {
 import PeopleIcon from '@mui/icons-material/People';
 import SchoolIcon from '@mui/icons-material/School';
 import { MdClass } from 'react-icons/md';
-import BarChartIcon from '@mui/icons-material/BarChart';
+// import BarChartIcon from '@mui/icons-material/BarChart';
 import InsightsIcon from '@mui/icons-material/Insights';
+import BarChartIcon from '@mui/icons-material/BarChart';
 import ForumIcon from '@mui/icons-material/Forum';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
-import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
+// import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import CommentIcon from '@mui/icons-material/Comment';
 import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
@@ -87,8 +86,9 @@ const Sidebar = ({ currentUser }) => {
   { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard', permission: null, color: '#4361ee' },
   { text: 'Announcements', icon: <NotificationsActiveIcon />, path: 'announcements', permission: null, color: '#1976d2' },
     { text: 'My Courses', icon: <MdClass />, path: 'courses', permission: null, color: '#f72585' },
-    { text: 'Quizzes', icon: <QuizIcon />, path: 'quizzes', permission: null, color: '#e91e63' },
-    { text: 'Videos', icon: <VideoLibraryIcon />, path: 'videos', permission: 'manage_videos', color: '#7209b7' },
+
+
+
     { 
       text: 'Students', 
       icon: <SchoolIcon />, 
@@ -112,15 +112,8 @@ const Sidebar = ({ currentUser }) => {
   { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard', color: '#4361ee' },
   { text: 'Announcements', icon: <NotificationsActiveIcon />, path: 'announcements', color: '#1976d2' },
     { text: 'My Courses', icon: <MdClass />, path: 'courses', color: '#f72585' },
-    { text: 'Videos', icon: <VideoLibraryIcon />, path: 'videos', color: '#7209b7' },
+
     { text: 'Forums', icon: <ForumIcon />, path: 'forums', color: '#ff9e00' },
-    { 
-      text: 'Unanswered Forums', 
-      icon: <QuestionAnswerIcon />, 
-      path: 'unanswered-forums', 
-      color: '#fb8500',
-      isNew: true 
-    },
   ];
   
   // Dean menu

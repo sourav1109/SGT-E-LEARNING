@@ -8,7 +8,6 @@ import {
   Tooltip,
   CircularProgress,
   Dialog,
-  DialogContent,
   AppBar,
   Toolbar,
   Container
@@ -41,6 +40,42 @@ const TeacherVideoPlayer = ({ videoUrl, title }) => {
   const [controlsTimeout, setControlsTimeout] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
+  // Helper function to validate URL
+  const isValidUrl = (url) => {
+    if (!url) return false;
+    try {
+      new URL(url);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  };
+
+  // Debug videoUrl
+  useEffect(() => {
+    console.log('Video URL passed to player:', videoUrl);
+    console.log('Is valid URL:', isValidUrl(videoUrl));
+    
+    // Try to fetch the URL to see if it's accessible
+    if (videoUrl && videoUrl.startsWith('http')) {
+      fetch(videoUrl, { method: 'HEAD' })
+        .then(response => {
+          console.log('Video URL accessibility check:', response.status, response.ok);
+          if (!response.ok) {
+            // If the URL isn't accessible, log an error
+            console.error(`Video URL is not accessible (${response.status})`);
+            setError(`Video URL is not accessible (${response.status}). Please try a different video.`);
+            setLoading(false);
+          }
+        })
+        .catch(error => {
+          console.error('Video URL is not accessible:', error);
+          setError(`Video cannot be accessed: ${error.message}`);
+          setLoading(false);
+        });
+    }
+  }, [videoUrl]);
+
   // Speed options
   const speedOptions = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -50,7 +85,27 @@ const TeacherVideoPlayer = ({ videoUrl, title }) => {
     if (!video) return;
 
     // Function to handle canplay event
-    const handleCanPlay = () => setLoading(false);
+    const handleCanPlay = () => {
+      setLoading(false);
+      setError(null); // Clear any previous errors when video can play
+    };
+    
+    // Function to handle video errors
+    const handleVideoError = (e) => {
+      console.error('Video error:', e);
+      const errorMessages = {
+        1: 'Video loading aborted',
+        2: 'Network error while loading video',
+        3: 'Video decoding failed',
+        4: 'Video not supported by your browser'
+      };
+      
+      const errorCode = video.error ? video.error.code : 0;
+      const errorMessage = errorMessages[errorCode] || 'Unknown video error';
+      
+      setError(`${errorMessage}. URL: ${videoUrl}`);
+      setLoading(false);
+    };
     
     // Function to directly handle duration changes
     const handleDurationChange = () => {
@@ -199,12 +254,6 @@ const TeacherVideoPlayer = ({ videoUrl, title }) => {
     if (!isNaN(videoDuration) && videoDuration > 0 && Math.abs(duration - videoDuration) > 1) {
       setDuration(videoDuration);
     }
-  };
-
-  const handleVideoError = (e) => {
-    console.error('Video error:', e);
-    setError('Error loading video. Please try again later.');
-    setLoading(false);
   };
 
   const togglePlay = () => {

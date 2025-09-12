@@ -50,3 +50,24 @@ export const warnVideo = async (id, token) => {
   });
   return res.data;
 };
+
+/**
+ * Get a specific video by ID for teacher
+ * @param {string} videoId - The ID of the video to fetch
+ * @param {string} token - Authentication token
+ * @returns {Promise} - Video data
+ */
+export const getTeacherVideoById = async (videoId, token) => {
+  try {
+    console.log('Making API call to:', `/api/teacher/videos/${videoId}`);
+    const response = await axios.get(`/api/teacher/videos/${videoId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    console.log('API response:', response);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching video details:', error);
+    console.error('Error response:', error.response?.data);
+    throw error;
+  }
+};

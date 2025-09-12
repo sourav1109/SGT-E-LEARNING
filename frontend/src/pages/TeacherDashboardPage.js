@@ -9,7 +9,6 @@ import {
   Group as GroupIcon, 
   ExitToApp as LogoutIcon, 
   AccountCircle as AccountIcon,
-  Forum as ForumIcon,
   CloudUpload as CloudUploadIcon,
   BarChart as BarChartIcon
 } from '@mui/icons-material';
@@ -134,10 +133,7 @@ const TeacherDashboardPage = () => {
           <ListItemIcon><VideoLibraryIcon /></ListItemIcon>
           <ListItemText primary="My Courses" />
         </ListItem>
-        <ListItem button onClick={() => { navigate('/teacher/forums'); setDrawerOpen(false); }}>
-          <ListItemIcon><ForumIcon /></ListItemIcon>
-          <ListItemText primary="Discussion Forums" />
-        </ListItem>
+  {/* Forum navigation removed */}
         {canManageVideos && (
           <ListItem button onClick={() => { navigate('/teacher/videos/upload'); setDrawerOpen(false); }}>
             <ListItemIcon><CloudUploadIcon /></ListItemIcon>
