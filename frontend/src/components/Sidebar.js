@@ -34,6 +34,9 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import QuizIcon from '@mui/icons-material/Quiz';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import BusinessIcon from '@mui/icons-material/Business';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { hasPermission } from '../utils/permissions';
 
@@ -61,6 +64,10 @@ const Sidebar = ({ currentUser }) => {
     { text: 'Teachers', icon: <PeopleIcon />, path: 'teachers', color: '#3a0ca3' },
     { text: 'Students', icon: <SchoolIcon />, path: 'students', color: '#7209b7' },
     { text: 'Courses', icon: <MdClass />, path: 'courses', color: '#f72585' },
+    { text: 'Schools', icon: <AccountBalanceIcon />, path: 'schools', color: '#9c27b0' },
+    { text: 'Departments', icon: <BusinessIcon />, path: 'departments', color: '#795548' },
+    { text: 'Deans', icon: <AccountBalanceIcon />, path: 'deans', color: '#673ab7' },
+    { text: 'HODs', icon: <SupervisorAccountIcon />, path: 'hods', color: '#607d8b' },
     { text: 'Enhanced Analytics', icon: <InsightsIcon />, path: 'enhanced-analytics', color: '#4cc9f0' },
     { 
       text: 'Forum Management', 
@@ -116,6 +123,25 @@ const Sidebar = ({ currentUser }) => {
     },
   ];
   
+  // Dean menu
+  const deanMenu = [
+    { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard', color: '#4361ee' },
+    { text: 'Announcements', icon: <NotificationsActiveIcon />, path: 'announcements', color: '#1976d2' },
+    { text: 'Departments', icon: <BusinessIcon />, path: 'departments', color: '#795548' },
+    { text: 'Teachers', icon: <PeopleIcon />, path: 'teachers', color: '#3a0ca3' },
+    { text: 'Courses', icon: <MdClass />, path: 'courses', color: '#f72585' },
+    { text: 'Analytics', icon: <BarChartIcon />, path: 'analytics', color: '#4cc9f0' },
+  ];
+
+  // HOD menu
+  const hodMenu = [
+    { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard', color: '#4361ee' },
+    { text: 'Announcements', icon: <NotificationsActiveIcon />, path: 'announcements', color: '#1976d2' },
+    { text: 'Teachers', icon: <PeopleIcon />, path: 'teachers', color: '#3a0ca3' },
+    { text: 'Courses', icon: <MdClass />, path: 'courses', color: '#f72585' },
+    { text: 'Analytics', icon: <BarChartIcon />, path: 'analytics', color: '#4cc9f0' },
+  ];
+
   // Select menu based on user role
   let menu = [];
   let basePath = '';
@@ -127,6 +153,16 @@ const Sidebar = ({ currentUser }) => {
     basePath = '/admin';
     roleName = 'Administrator';
     roleColor = '#3a0ca3';
+  } else if (currentUser?.role === 'dean') {
+    menu = deanMenu;
+    basePath = '/dean';
+    roleName = 'Dean';
+    roleColor = '#7b1fa2';
+  } else if (currentUser?.role === 'hod') {
+    menu = hodMenu;
+    basePath = '/hod';
+    roleName = 'HOD';
+    roleColor = '#c2185b';
   } else if (currentUser?.role === 'teacher') {
     // Filter teacher menu based on permissions
     menu = teacherMenu.filter(item => 

@@ -1,6 +1,11 @@
 // Bulk messaging: email or notification to students/teachers
 const nodemailer = require('nodemailer');
+const bcrypt = require('bcryptjs');
 const Notification = require('../models/Notification');
+const User = require('../models/User');
+const Course = require('../models/Course');
+const School = require('../models/School');
+const Department = require('../models/Department');
 const fs = require('fs');
 const csv = require('csv-parser');
 const mongoose = require('mongoose');
@@ -105,7 +110,9 @@ exports.getAllCourses = async (req, res) => {
 // Get all students
 exports.getAllStudents = async (req, res) => {
   try {
-    const students = await User.find({ role: 'student' });
+    const students = await User.find({ role: 'student' })
+      .populate('school', 'name code')
+      .populate('coursesAssigned', 'title courseCode');
     res.json(students);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -279,10 +286,8 @@ exports.searchTeachers = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-const User = require('../models/User');
-const Course = require('../models/Course');
+
 const Video = require('../models/Video');
-const bcrypt = require('bcryptjs');
 
 // Helper: resolve an array of course identifiers (ObjectId strings or courseCode strings)
 // to an array of valid Course ObjectIds. Returns { ids, notFound }
@@ -311,7 +316,12 @@ async function resolveCourseIdentifiers(identifiers) {
 // Add a teacher manually
 exports.addTeacher = async (req, res) => {
   try {
-    const { name, email, password, permissions } = req.body;
+    const { name, email, password, permissions, school, department } = req.body;
+    
+    // Validate required fields
+    if (!name || !email || !password || !school || !department) {
+      return res.status(400).json({ message: 'Name, email, password, school, and department are required' });
+    }
     
     // Validate email format
     if (!email || !email.includes('@') || !email.includes('.')) {
@@ -327,6 +337,22 @@ exports.addTeacher = async (req, res) => {
       return res.status(400).json({ message: 'A user with this email already exists' });
     }
     
+    // Validate school and department exist
+    const schoolExists = await School.findById(school);
+    if (!schoolExists) {
+      return res.status(400).json({ message: 'Invalid school selected' });
+    }
+    
+    const departmentExists = await Department.findById(department);
+    if (!departmentExists) {
+      return res.status(400).json({ message: 'Invalid department selected' });
+    }
+    
+    // Verify department belongs to the selected school
+    if (departmentExists.school.toString() !== school) {
+      return res.status(400).json({ message: 'Department does not belong to the selected school' });
+    }
+    
     const hashedPassword = await bcrypt.hash(password, 10);
     const teacher = new User({ 
       name, 
@@ -334,6 +360,8 @@ exports.addTeacher = async (req, res) => {
       password: hashedPassword, 
       role: 'teacher', 
       permissions,
+      school,
+      department,
       teacherId: null // Will be auto-generated in the pre-save hook
     });
     
@@ -342,8 +370,11 @@ exports.addTeacher = async (req, res) => {
       action: 'add_teacher', 
       performedBy: req.user._id, 
       targetUser: teacher._id, 
-      details: { name, email: normalizedEmail } 
+      details: { name, email: normalizedEmail, school, department } 
     });
+    
+    // Populate school and department info for response
+    await teacher.populate('school department');
     
     res.status(201).json(teacher);
   } catch (err) {
@@ -564,7 +595,18 @@ exports.createStudent = async (req, res) => {
     }
     
     console.log('Creating student with data:', req.body);
-  const { name, email, password, regNo, coursesAssigned } = req.body;
+  const { name, email, password, regNo, school, coursesAssigned } = req.body;
+    
+    // Validate required fields
+    if (!school) {
+      return res.status(400).json({ message: 'School is required for student admission' });
+    }
+    
+    // Verify school exists
+    const schoolExists = await require('../models/School').findById(school);
+    if (!schoolExists) {
+      return res.status(400).json({ message: 'Selected school not found' });
+    }
     
     // Validate email format
     if (!email || !email.includes('@') || !email.includes('.')) {
@@ -589,28 +631,58 @@ exports.createStudent = async (req, res) => {
     // Check if regNo is provided or generate a new one
     let studentRegNo = regNo;
     if (!studentRegNo) {
-      // Find the highest existing regNo
-      const highestStudent = await User.findOne(
-        { regNo: { $regex: /^S\d{6}$/ } },
-        { regNo: 1 },
-        { sort: { regNo: -1 } }
-      );
+      // Generate a unique registration number with retry logic
+      let attempts = 0;
+      const maxAttempts = 10;
       
-      let nextNumber = 1;
-      if (highestStudent && highestStudent.regNo) {
-        // Extract the number from existing regNo and increment
-        const currentNumber = parseInt(highestStudent.regNo.substring(1), 10);
-        nextNumber = currentNumber + 1;
+      while (attempts < maxAttempts) {
+        // Find the highest existing regNo
+        const highestStudent = await User.findOne(
+          { regNo: { $regex: /^S\d{6}$/ } },
+          { regNo: 1 },
+          { sort: { regNo: -1 } }
+        );
+        
+        let nextNumber = 1;
+        if (highestStudent && highestStudent.regNo) {
+          // Extract the number from existing regNo and increment
+          const currentNumber = parseInt(highestStudent.regNo.substring(1), 10);
+          nextNumber = currentNumber + 1;
+        }
+        
+        // Format with leading zeros to ensure 6 digits
+        studentRegNo = 'S' + nextNumber.toString().padStart(6, '0');
+        
+        // Check if this regNo already exists
+        const existingStudent = await User.findOne({ regNo: studentRegNo });
+        if (!existingStudent) {
+          break; // Found a unique regNo
+        }
+        
+        attempts++;
+        console.log(`Registration number ${studentRegNo} already exists, trying again (attempt ${attempts})`);
       }
       
-      // Format with leading zeros to ensure 6 digits
-      studentRegNo = 'S' + nextNumber.toString().padStart(6, '0');
+      if (attempts >= maxAttempts) {
+        return res.status(500).json({ 
+          message: 'Unable to generate a unique registration number. Please try again.' 
+        });
+      }
+      
       console.log('Generated registration number:', studentRegNo);
     } else if (!studentRegNo.startsWith('S') || !/^S\d{6}$/.test(studentRegNo)) {
       console.log('Invalid registration number format:', studentRegNo);
       return res.status(400).json({ 
         message: 'Registration number format is invalid. It should start with S followed by 6 digits.' 
       });
+    } else {
+      // If regNo is provided, check if it already exists
+      const existingStudent = await User.findOne({ regNo: studentRegNo });
+      if (existingStudent) {
+        return res.status(400).json({ 
+          message: `Registration number ${studentRegNo} is already in use.` 
+        });
+      }
     }
     
     // Create the student
@@ -659,6 +731,7 @@ exports.createStudent = async (req, res) => {
       password: hashedPassword,
       role: 'student',
       regNo: studentRegNo,
+      school: school, // Add school reference
       coursesAssigned: resolvedCourses
     });
     
@@ -671,7 +744,7 @@ exports.createStudent = async (req, res) => {
       action: 'add_student',
       performedBy: req.user._id,
       targetUser: student._id,
-      details: { name, email: normalizedEmail, regNo: studentRegNo }
+      details: { name, email: normalizedEmail, regNo: studentRegNo, school: schoolExists.name }
     });
     
     // Unlock the first video for each assigned course
@@ -1001,7 +1074,35 @@ exports.createCourse = async (req, res) => {
     }
     
     console.log('Creating course with data:', req.body);
-    const { title, description, teacherIds } = req.body;
+    const { title, description, teacherIds, school, department } = req.body;
+    
+    // Validate required fields
+    if (!school) {
+      return res.status(400).json({ message: 'School is required for course creation' });
+    }
+    
+    if (!department) {
+      return res.status(400).json({ message: 'Department is required for course creation' });
+    }
+    
+    // Verify school and department exist
+    const School = require('../models/School');
+    const Department = require('../models/Department');
+    
+    const schoolExists = await School.findById(school);
+    if (!schoolExists) {
+      return res.status(400).json({ message: 'Selected school not found' });
+    }
+    
+    const departmentExists = await Department.findById(department);
+    if (!departmentExists) {
+      return res.status(400).json({ message: 'Selected department not found' });
+    }
+    
+    // Verify department belongs to the selected school
+    if (departmentExists.school.toString() !== school) {
+      return res.status(400).json({ message: 'Selected department does not belong to the selected school' });
+    }
     
     // Validate teacher IDs if provided
     let teacherObjectIds = [];
@@ -1060,6 +1161,8 @@ exports.createCourse = async (req, res) => {
       courseCode,
       title, 
       description, 
+      school,
+      department,
       teachers: teacherObjectIds 
     });
     
@@ -1091,7 +1194,15 @@ exports.createCourse = async (req, res) => {
     await AuditLog.create({ 
       action: 'create_course', 
       performedBy: req.user._id, 
-      details: { courseCode, title, description, teacherIds, forumCreated: true } 
+      details: { 
+        courseCode, 
+        title, 
+        description, 
+        school: schoolExists.name,
+        department: departmentExists.name,
+        teacherIds, 
+        forumCreated: true 
+      } 
     });
     
     res.status(201).json(savedCourse);
@@ -1652,6 +1763,275 @@ exports.getCourseStudents = async (req, res) => {
     res.json(studentData);
   } catch (err) {
     console.error('Error getting course students:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Dean Management Functions
+exports.createDean = async (req, res) => {
+  try {
+    const { name, email, password, schoolId } = req.body;
+    
+    // Check if user with email already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User with this email already exists' });
+    }
+    
+    // Verify school exists
+    const school = await School.findById(schoolId);
+    if (!school) {
+      return res.status(400).json({ message: 'School not found' });
+    }
+    
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Create dean user
+    const dean = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: 'dean',
+      school: schoolId,
+      isActive: true,
+      emailVerified: true
+    });
+    
+    await dean.save();
+    
+    // Update school to reference this dean
+    await School.findByIdAndUpdate(schoolId, { dean: dean._id });
+    
+    res.status(201).json({ 
+      message: 'Dean created successfully', 
+      dean: {
+        _id: dean._id,
+        name: dean.name,
+        email: dean.email,
+        school: school.name
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getAllDeans = async (req, res) => {
+  try {
+    const deans = await User.find({ role: 'dean' })
+      .populate('school', 'name')
+      .select('name email school isActive createdAt');
+    
+    res.json(deans);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.updateDean = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, schoolId, isActive } = req.body;
+    
+    // Find current dean
+    const dean = await User.findById(id);
+    if (!dean || dean.role !== 'dean') {
+      return res.status(404).json({ message: 'Dean not found' });
+    }
+    
+    // If school is changing, update old and new schools
+    if (schoolId && schoolId !== dean.school?.toString()) {
+      // Remove dean from old school
+      if (dean.school) {
+        await School.findByIdAndUpdate(dean.school, { $unset: { dean: 1 } });
+      }
+      
+      // Verify new school exists
+      const newSchool = await School.findById(schoolId);
+      if (!newSchool) {
+        return res.status(400).json({ message: 'New school not found' });
+      }
+      
+      // Add dean to new school
+      await School.findByIdAndUpdate(schoolId, { dean: id });
+    }
+    
+    // Update dean
+    const updatedDean = await User.findByIdAndUpdate(
+      id,
+      { name, email, school: schoolId, isActive },
+      { new: true }
+    ).populate('school', 'name');
+    
+    res.json({ 
+      message: 'Dean updated successfully', 
+      dean: updatedDean 
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.deleteDean = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const dean = await User.findById(id);
+    if (!dean || dean.role !== 'dean') {
+      return res.status(404).json({ message: 'Dean not found' });
+    }
+    
+    // Remove dean reference from school
+    if (dean.school) {
+      await School.findByIdAndUpdate(dean.school, { $unset: { dean: 1 } });
+    }
+    
+    // Delete dean
+    await User.findByIdAndDelete(id);
+    
+    res.json({ message: 'Dean deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// HOD Management Functions
+exports.createHOD = async (req, res) => {
+  try {
+    const { name, email, password, schoolId, departmentId } = req.body;
+    
+    // Check if user with email already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User with this email already exists' });
+    }
+    
+    // Verify department exists and belongs to the school
+    const department = await Department.findById(departmentId).populate('school');
+    if (!department) {
+      return res.status(400).json({ message: 'Department not found' });
+    }
+    
+    if (department.school._id.toString() !== schoolId) {
+      return res.status(400).json({ message: 'Department does not belong to the selected school' });
+    }
+    
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Create HOD user
+    const hod = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: 'hod',
+      school: schoolId,
+      department: departmentId,
+      isActive: true,
+      emailVerified: true
+    });
+    
+    await hod.save();
+    
+    // Update department to reference this HOD
+    await Department.findByIdAndUpdate(departmentId, { hod: hod._id });
+    
+    res.status(201).json({ 
+      message: 'HOD created successfully', 
+      hod: {
+        _id: hod._id,
+        name: hod.name,
+        email: hod.email,
+        school: department.school.name,
+        department: department.name
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.getAllHODs = async (req, res) => {
+  try {
+    const hods = await User.find({ role: 'hod' })
+      .populate('school', 'name')
+      .populate('department', 'name')
+      .select('name email school department isActive createdAt');
+    
+    res.json(hods);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.updateHOD = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, schoolId, departmentId, isActive } = req.body;
+    
+    // Find current HOD
+    const hod = await User.findById(id);
+    if (!hod || hod.role !== 'hod') {
+      return res.status(404).json({ message: 'HOD not found' });
+    }
+    
+    // If department is changing, update old and new departments
+    if (departmentId && departmentId !== hod.department?.toString()) {
+      // Remove HOD from old department
+      if (hod.department) {
+        await Department.findByIdAndUpdate(hod.department, { $unset: { hod: 1 } });
+      }
+      
+      // Verify new department exists and belongs to the school
+      const newDepartment = await Department.findById(departmentId);
+      if (!newDepartment) {
+        return res.status(400).json({ message: 'New department not found' });
+      }
+      
+      if (newDepartment.school.toString() !== schoolId) {
+        return res.status(400).json({ message: 'Department does not belong to the selected school' });
+      }
+      
+      // Add HOD to new department
+      await Department.findByIdAndUpdate(departmentId, { hod: id });
+    }
+    
+    // Update HOD
+    const updatedHOD = await User.findByIdAndUpdate(
+      id,
+      { name, email, school: schoolId, department: departmentId, isActive },
+      { new: true }
+    ).populate('school', 'name').populate('department', 'name');
+    
+    res.json({ 
+      message: 'HOD updated successfully', 
+      hod: updatedHOD 
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+exports.deleteHOD = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const hod = await User.findById(id);
+    if (!hod || hod.role !== 'hod') {
+      return res.status(404).json({ message: 'HOD not found' });
+    }
+    
+    // Remove HOD reference from department
+    if (hod.department) {
+      await Department.findByIdAndUpdate(hod.department, { $unset: { hod: 1 } });
+    }
+    
+    // Delete HOD
+    await User.findByIdAndDelete(id);
+    
+    res.json({ message: 'HOD deleted successfully' });
+  } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };

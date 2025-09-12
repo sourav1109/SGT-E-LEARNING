@@ -181,4 +181,16 @@ router.post('/forums/dismiss-flags', (req, res) => {
 // Link to centralized discussion system
 router.use('/discussions', require('../routes/discussionRoutes'));
 
+// Dean Management Routes
+router.post('/deans', adminController.createDean);
+router.get('/deans', adminController.getAllDeans);
+router.put('/deans/:id', adminController.updateDean);
+router.delete('/deans/:id', adminController.deleteDean);
+
+// HOD Management Routes
+router.post('/hods', adminController.createHOD);
+router.get('/hods', adminController.getAllHODs);
+router.put('/hods/:id', adminController.updateHOD);
+router.delete('/hods/:id', adminController.deleteHOD);
+
 module.exports = router;

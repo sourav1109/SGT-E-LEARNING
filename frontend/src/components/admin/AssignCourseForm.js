@@ -90,12 +90,17 @@ const AssignCourseForm = ({ onAssign }) => {
             id="student-registration"
             options={students}
             getOptionLabel={(option) => `${option.regNo} - ${option.name}`}
-            isOptionEqualToValue={(option, value) => option.regNo === value.regNo}
+            isOptionEqualToValue={(option, value) => option._id === value._id}
             loading={loadingStudents}
             value={students.find(s => s.regNo === regNo) || null}
             onChange={(event, newValue) => {
               setRegNo(newValue ? newValue.regNo : '');
             }}
+            renderOption={(props, option) => (
+              <li {...props} key={option._id}>
+                {`${option.regNo} - ${option.name}`}
+              </li>
+            )}
             renderInput={(params) => (
               <TextField
                 {...params}
@@ -119,13 +124,18 @@ const AssignCourseForm = ({ onAssign }) => {
           <Autocomplete
             id="course-selection"
             options={courses}
-            getOptionLabel={(option) => `${option.code} - ${option.title}`}
+            getOptionLabel={(option) => `${option.courseCode || option.code || 'No Code'} - ${option.title}`}
             isOptionEqualToValue={(option, value) => option._id === value._id}
             loading={loadingCourses}
             value={courses.find(c => c._id === courseId) || null}
             onChange={(event, newValue) => {
               setCourseId(newValue ? newValue._id : '');
             }}
+            renderOption={(props, option) => (
+              <li {...props} key={option._id}>
+                {`${option.courseCode || option.code || 'No Code'} - ${option.title}`}
+              </li>
+            )}
             renderInput={(params) => (
               <TextField
                 {...params}

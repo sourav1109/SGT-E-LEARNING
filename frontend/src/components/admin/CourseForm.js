@@ -12,9 +12,14 @@ import {
   Grid,
   CircularProgress,
   IconButton,
-  Tooltip
+  Tooltip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import { getTeachersBySearch } from '../../api/courseApi';
+import axios from 'axios';
 import ClearIcon from '@mui/icons-material/Clear';
 import SaveIcon from '@mui/icons-material/Save';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
@@ -23,15 +28,40 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import CodeIcon from '@mui/icons-material/Code';
 
 const CourseForm = ({ onSubmit, initial, submitLabel }) => {
-  const [form, setForm] = useState(initial || { title: '', description: '', teacherIds: [] });
+  const [form, setForm] = useState(initial || { 
+    title: '', 
+    description: '', 
+    teacherIds: [], 
+    school: '', 
+    department: '' 
+  });
   const [error, setError] = useState('');
   const [teacherSearch, setTeacherSearch] = useState('');
   const [teacherOptions, setTeacherOptions] = useState([]);
   const [selectedTeachers, setSelectedTeachers] = useState([]);
+  const [schools, setSchools] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [filteredDepartments, setFilteredDepartments] = useState([]);
   const [loading, setLoading] = useState(false);
   const token = localStorage.getItem('token');
 
   useEffect(() => {
+    // Fetch schools and departments
+    const fetchData = async () => {
+      try {
+        const [schoolsRes, departmentsRes] = await Promise.all([
+          axios.get('/api/schools', { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get('/api/departments', { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+        setSchools(schoolsRes.data);
+        setDepartments(departmentsRes.data);
+      } catch (err) {
+        console.error('Error fetching schools/departments:', err);
+      }
+    };
+    
+    fetchData();
+    
     // If initial includes teachers, set them as selected
     if (initial && initial.teachers && Array.isArray(initial.teachers)) {
       setSelectedTeachers(initial.teachers.map(teacher => ({
@@ -41,12 +71,36 @@ const CourseForm = ({ onSubmit, initial, submitLabel }) => {
         email: teacher.email || ''
       })));
     }
-  }, [initial]);
+    
+    // Set initial school and department if editing
+    if (initial) {
+      setForm(prev => ({
+        ...prev,
+        school: initial.school?._id || initial.school || '',
+        department: initial.department?._id || initial.department || ''
+      }));
+    }
+  }, [initial, token]);
+
+  // Filter departments when school changes
+  useEffect(() => {
+    if (form.school) {
+      const filtered = departments.filter(dept => dept.school._id === form.school);
+      setFilteredDepartments(filtered);
+      // Reset department if it doesn't belong to selected school
+      if (form.department && !filtered.find(d => d._id === form.department)) {
+        setForm(prev => ({ ...prev, department: '' }));
+      }
+    } else {
+      setFilteredDepartments([]);
+      setForm(prev => ({ ...prev, department: '' }));
+    }
+  }, [form.school, departments]);
 
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
 
   const resetForm = () => {
-    setForm({ title: '', description: '', teacherIds: [] });
+    setForm({ title: '', description: '', teacherIds: [], school: '', department: '' });
     setSelectedTeachers([]);
     setError('');
   };
@@ -55,6 +109,8 @@ const CourseForm = ({ onSubmit, initial, submitLabel }) => {
     e.preventDefault();
     setError('');
     if (!form.title) return setError('Title required');
+    if (!form.school) return setError('School is required');
+    if (!form.department) return setError('Department is required');
     
     // Add the selected teacher IDs to the form
     const teacherIds = selectedTeachers.map(teacher => teacher.teacherId);
@@ -165,6 +221,42 @@ const CourseForm = ({ onSubmit, initial, submitLabel }) => {
             />
           </Grid>
           
+          <Grid item xs={12} md={6}>
+            <FormControl fullWidth margin="normal" required>
+              <InputLabel>School</InputLabel>
+              <Select
+                name="school"
+                value={form.school}
+                onChange={handleChange}
+                label="School"
+              >
+                {schools.map(school => (
+                  <MenuItem key={school._id} value={school._id}>
+                    {school.name} ({school.code})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <FormControl fullWidth margin="normal" required disabled={!form.school}>
+              <InputLabel>Department</InputLabel>
+              <Select
+                name="department"
+                value={form.department}
+                onChange={handleChange}
+                label="Department"
+              >
+                {filteredDepartments.map(dept => (
+                  <MenuItem key={dept._id} value={dept._id}>
+                    {dept.name} ({dept.code})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          
           <Grid item xs={12}>
             <Autocomplete
               multiple
@@ -178,22 +270,25 @@ const CourseForm = ({ onSubmit, initial, submitLabel }) => {
                 setTeacherSearch(newInputValue);
               }}
               renderTags={(value, getTagProps) =>
-                value.map((option, index) => (
-                  <Chip
-                    key={index}
-                    label={`${option.teacherId || ''} - ${option.name}`}
-                    {...getTagProps({ index })}
-                    color="primary"
-                    variant="outlined"
-                    sx={{ 
-                      m: 0.5,
-                      '& .MuiChip-deleteIcon': {
-                        color: 'error.light',
-                        '&:hover': { color: 'error.main' }
-                      }
-                    }}
-                  />
-                ))
+                value.map((option, index) => {
+                  const { key, ...tagProps } = getTagProps({ index });
+                  return (
+                    <Chip
+                      key={option._id || index}
+                      label={`${option.teacherId || ''} - ${option.name}`}
+                      {...tagProps}
+                      color="primary"
+                      variant="outlined"
+                      sx={{ 
+                        m: 0.5,
+                        '& .MuiChip-deleteIcon': {
+                          color: 'error.light',
+                          '&:hover': { color: 'error.main' }
+                        }
+                      }}
+                    />
+                  );
+                })
               }
               renderInput={(params) => (
                 <TextField

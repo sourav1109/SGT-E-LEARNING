@@ -53,8 +53,14 @@ exports.checkUnitQuizAvailability = async (req, res) => {
         return videoProgress && videoProgress.completed;
       }).length;
       
+      // Method 4: Check global completedVideos array for this unit's videos
+      const completedVideosGlobal = progress.completedVideos || [];
+      const watchedViaGlobal = unit.videos.filter(video => 
+        completedVideosGlobal.includes(video._id.toString())
+      ).length;
+      
       // Use the highest count as the most reliable indicator
-      const maxWatchedCount = Math.max(watchedViaArray, watchedViaCounter, watchedViaEntries);
+      const maxWatchedCount = Math.max(watchedViaArray, watchedViaCounter, watchedViaEntries, watchedViaGlobal);
       allVideosWatched = maxWatchedCount >= totalVideos;
       
       console.log('Quiz availability check:', {
@@ -63,6 +69,7 @@ exports.checkUnitQuizAvailability = async (req, res) => {
         watchedViaArray,
         watchedViaCounter, 
         watchedViaEntries,
+        watchedViaGlobal,
         maxWatchedCount,
         allVideosWatched
       });

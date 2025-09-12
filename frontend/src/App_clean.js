@@ -9,8 +9,6 @@ import UnauthorizedPage from './pages/UnauthorizedPage';
 import AdminDashboard from './pages/AdminDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import StudentDashboard from './pages/StudentDashboard';
-import DeanDashboard from './pages/DeanDashboard';
-import HODDashboard from './pages/HODDashboard';
 import PrivateRoute from './components/PrivateRoute';
 import { restoreUserFromToken } from './utils/authService';
 
@@ -78,22 +76,6 @@ function App() {
           element={
             <PrivateRoute allowedRoles={['admin']}>
               <AdminDashboard />
-            </PrivateRoute>
-          } 
-        />
-        <Route 
-          path="/dean/*" 
-          element={
-            <PrivateRoute allowedRoles={['dean', 'admin']}>
-              <DeanDashboard />
-            </PrivateRoute>
-          } 
-        />
-        <Route 
-          path="/hod/*" 
-          element={
-            <PrivateRoute allowedRoles={['hod', 'admin']}>
-              <HODDashboard />
             </PrivateRoute>
           } 
         />

@@ -42,15 +42,34 @@ const StudentTable = ({ students, onEdit, onRemove }) => {
   }, []);
 
   // Map course IDs to course names
-  const getCourseNameById = (courseId) => {
-    const course = courses.find(c => c._id === courseId);
-    return course ? `${course.code}: ${course.title}` : courseId;
+  const getCourseNameById = (course) => {
+    // Handle both populated course objects and course IDs
+    if (typeof course === 'object' && course.courseCode && course.title) {
+      return `${course.courseCode}: ${course.title}`;
+    } else if (typeof course === 'string') {
+      const foundCourse = courses.find(c => c._id === course);
+      return foundCourse ? `${foundCourse.code}: ${foundCourse.title}` : course;
+    }
+    return course;
+  };
+
+  const getCourseCode = (course) => {
+    // Handle both populated course objects and course IDs
+    if (typeof course === 'object' && course.courseCode) {
+      return course.courseCode;
+    } else if (typeof course === 'string') {
+      const foundCourse = courses.find(c => c._id === course);
+      return foundCourse ? foundCourse.code : (course.length > 8 ? course.substring(0, 8) + '...' : course);
+    }
+    return String(course);
   };
 
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(search.toLowerCase()) ||
     student.email.toLowerCase().includes(search.toLowerCase()) ||
-    (student.regNo && student.regNo.toLowerCase().includes(search.toLowerCase()))
+    (student.regNo && student.regNo.toLowerCase().includes(search.toLowerCase())) ||
+    (student.school?.name && student.school.name.toLowerCase().includes(search.toLowerCase())) ||
+    (student.school?.code && student.school.code.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -59,7 +78,7 @@ const StudentTable = ({ students, onEdit, onRemove }) => {
         fullWidth
         variant="outlined"
         size="small"
-        placeholder="Search by name, email, or reg no"
+        placeholder="Search by name, email, reg no, or school"
         value={search}
         onChange={e => setSearch(e.target.value)}
         sx={{ mb: 2, maxWidth: 400 }}
@@ -78,6 +97,7 @@ const StudentTable = ({ students, onEdit, onRemove }) => {
               <TableCell sx={{ fontWeight: 'bold' }}>Reg No</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Email</TableCell>
+              <TableCell sx={{ fontWeight: 'bold' }}>School</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Courses</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Actions</TableCell>
@@ -93,19 +113,30 @@ const StudentTable = ({ students, onEdit, onRemove }) => {
                 <TableCell>{student.name}</TableCell>
                 <TableCell>{student.email}</TableCell>
                 <TableCell>
+                  {student.school ? (
+                    <Chip 
+                      label={`${student.school.name} (${student.school.code})`} 
+                      size="small" 
+                      color="secondary" 
+                      variant="outlined" 
+                    />
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No School Assigned
+                    </Typography>
+                  )}
+                </TableCell>
+                <TableCell>
                   {student.coursesAssigned && student.coursesAssigned.length > 0 ? (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {student.coursesAssigned.map((courseId, index) => (
+                      {student.coursesAssigned.map((course, index) => (
                         <Tooltip 
                           key={index} 
-                          title={getCourseNameById(courseId)}
+                          title={getCourseNameById(course)}
                           arrow
                         >
                           <Chip
-                            label={
-                              courses.find(c => c._id === courseId)?.code || 
-                              courseId.substring(0, 8) + '...'
-                            }
+                            label={getCourseCode(course)}
                             size="small"
                             sx={{ 
                               backgroundColor: 'rgba(25, 118, 210, 0.08)',

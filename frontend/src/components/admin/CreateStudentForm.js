@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Typography, 
@@ -10,10 +10,15 @@ import {
   FormHelperText,
   InputAdornment,
   Autocomplete,
-  Chip
+  Chip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { createStudent } from '../../api/studentApi';
+import axios from 'axios';
 
 const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -23,15 +28,32 @@ const CreateStudentForm = ({ onStudentCreated }) => {
     email: '',
     password: '',
     regNo: '',
+    school: '',
     coursesAssigned: []
   });
   
   const [courses, setCourses] = useState([]);
+  const [schools, setSchools] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [success, setSuccess] = useState('');
   const [touched, setTouched] = useState({});
   const token = localStorage.getItem('token');
+
+  useEffect(() => {
+    fetchSchools();
+  }, []);
+
+  const fetchSchools = async () => {
+    try {
+      const response = await axios.get('/api/schools', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSchools(response.data);
+    } catch (error) {
+      console.error('Error fetching schools:', error);
+    }
+  };
 
   const validateField = (name, value) => {
     switch (name) {
@@ -55,6 +77,8 @@ const CreateStudentForm = ({ onStudentCreated }) => {
         return /^S\d{6}$/.test(value) 
           ? '' 
           : 'Registration number should start with S followed by 6 digits';
+      case 'school':
+        return value.trim() === '' ? 'School is required' : '';
       default:
         return '';
     }
@@ -131,6 +155,7 @@ const CreateStudentForm = ({ onStudentCreated }) => {
       email: '',
       password: '',
       regNo: '',
+      school: '',
       coursesAssigned: []
     });
     setErrors({});
@@ -248,10 +273,36 @@ const CreateStudentForm = ({ onStudentCreated }) => {
               placeholder="123456"
             />
           </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth margin="normal" error={touched.school && !!errors.school}>
+              <InputLabel>School *</InputLabel>
+              <Select
+                name="school"
+                value={formData.school}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                label="School *"
+                disabled={loading}
+              >
+                {schools.map((school) => (
+                  <MenuItem key={school._id} value={school._id}>
+                    {school.name} ({school.code})
+                  </MenuItem>
+                ))}
+              </Select>
+              {touched.school && errors.school && (
+                <FormHelperText>{errors.school}</FormHelperText>
+              )}
+            </FormControl>
+          </Grid>
           
           <Grid item xs={12}>
             <FormHelperText sx={{ mb: 1 }}>
               When creating a student:
+            </FormHelperText>
+            <FormHelperText sx={{ mb: 0.5 }}>
+              • School assignment is required during admission
             </FormHelperText>
             <FormHelperText sx={{ mb: 0.5 }}>
               • If you leave the registration number empty, the system will generate one starting with "S" followed by 6 digits

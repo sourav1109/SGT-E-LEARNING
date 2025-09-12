@@ -1,6 +1,7 @@
 
-import React, { useState } from 'react';
-import { Box, TextField, Button, Alert, FormGroup, FormControlLabel, Checkbox } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { Box, TextField, Button, Alert, FormGroup, FormControlLabel, Checkbox, MenuItem, Select, FormControl, InputLabel } from '@mui/material';
+import axios from 'axios';
 
 const PERMISSIONS = [
   { key: 'manage_teachers', label: 'Manage Teachers' },
@@ -13,12 +14,56 @@ const PERMISSIONS = [
 
 const AddTeacherForm = ({ onAdd }) => {
 
-  const [form, setForm] = useState({ name: '', email: '', password: '', permissions: [] });
+  const [form, setForm] = useState({ 
+    name: '', 
+    email: '', 
+    password: '', 
+    permissions: [],
+    school: '',
+    department: ''
+  });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [touched, setTouched] = useState({});
+  const [schools, setSchools] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [filteredDepartments, setFilteredDepartments] = useState([]);
+
+  const token = localStorage.getItem('token');
 
   const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+  // Fetch schools and departments on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [schoolsRes, departmentsRes] = await Promise.all([
+          axios.get('/api/schools', { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get('/api/departments', { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+        setSchools(schoolsRes.data);
+        setDepartments(departmentsRes.data);
+      } catch (err) {
+        console.error('Error fetching schools/departments:', err);
+      }
+    };
+    fetchData();
+  }, [token]);
+
+  // Filter departments when school changes
+  useEffect(() => {
+    if (form.school) {
+      const filtered = departments.filter(dept => dept.school._id === form.school);
+      setFilteredDepartments(filtered);
+      // Reset department if it doesn't belong to selected school
+      if (form.department && !filtered.find(d => d._id === form.department)) {
+        setForm(prev => ({ ...prev, department: '' }));
+      }
+    } else {
+      setFilteredDepartments([]);
+      setForm(prev => ({ ...prev, department: '' }));
+    }
+  }, [form.school, departments]);
 
   const handleChange = e => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -38,6 +83,8 @@ const AddTeacherForm = ({ onAdd }) => {
     if (!form.email.trim()) return 'Email is required';
     if (!emailRegex.test(form.email)) return 'Invalid email address';
     if (!form.password || form.password.length < 6) return 'Password must be at least 6 characters';
+    if (!form.school) return 'School is required';
+    if (!form.department) return 'Department is required';
     return '';
   };
 
@@ -53,7 +100,7 @@ const AddTeacherForm = ({ onAdd }) => {
     try {
       await onAdd(form);
       setSuccess('Teacher added successfully');
-      setForm({ name: '', email: '', password: '', permissions: [] });
+      setForm({ name: '', email: '', password: '', permissions: [], school: '', department: '' });
       setTouched({});
     } catch (err) {
       setError(err.message || 'Failed to add teacher');
@@ -104,6 +151,41 @@ const AddTeacherForm = ({ onAdd }) => {
         helperText={touched.password && (!form.password || form.password.length < 6) ? 'Password must be at least 6 characters' : ''}
         inputProps={{ title: 'Password must be at least 6 characters' }}
       />
+      
+      <FormControl fullWidth margin="normal" required error={!!touched.school && !form.school}>
+        <InputLabel>School</InputLabel>
+        <Select
+          name="school"
+          value={form.school}
+          onChange={handleChange}
+          label="School"
+        >
+          {schools.map(school => (
+            <MenuItem key={school._id} value={school._id}>
+              {school.name} ({school.code})
+            </MenuItem>
+          ))}
+        </Select>
+        {touched.school && !form.school && <Alert severity="error" sx={{ mt: 1 }}>School is required</Alert>}
+      </FormControl>
+
+      <FormControl fullWidth margin="normal" required error={!!touched.department && !form.department} disabled={!form.school}>
+        <InputLabel>Department</InputLabel>
+        <Select
+          name="department"
+          value={form.department}
+          onChange={handleChange}
+          label="Department"
+        >
+          {filteredDepartments.map(dept => (
+            <MenuItem key={dept._id} value={dept._id}>
+              {dept.name} ({dept.code})
+            </MenuItem>
+          ))}
+        </Select>
+        {touched.department && !form.department && <Alert severity="error" sx={{ mt: 1 }}>Department is required</Alert>}
+      </FormControl>
+      
       <FormGroup row sx={{ mt: 2 }}>
         {PERMISSIONS.map(p => (
           <FormControlLabel

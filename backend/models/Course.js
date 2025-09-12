@@ -4,11 +4,32 @@ const courseSchema = new mongoose.Schema({
   courseCode: { type: String, unique: true, index: true },
   title: { type: String, required: true, index: true },
   description: { type: String },
+  
+  // Hierarchy fields
+  school: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'School',
+    required: true,
+    index: true
+  },
+  department: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Department',
+    required: true,
+    index: true
+  },
+  
   teachers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true }],
   students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true }],
   videos: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Video' }],
   units: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Unit' }],
-  hasUnits: { type: Boolean, default: false }
+  hasUnits: { type: Boolean, default: false },
+  
+  // Additional course metadata
+  credits: { type: Number, default: 3 },
+  semester: { type: String },
+  academicYear: { type: String },
+  isActive: { type: Boolean, default: true }
 });
 
 // Virtual for calculating total video count including those in units

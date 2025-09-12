@@ -40,6 +40,10 @@ import EnhancedAnalytics from './admin/EnhancedAnalytics';
 import TeacherManagement from './admin/TeacherManagement';
 import StudentManagement from './admin/StudentManagement';
 import CourseManagement from './admin/CourseManagement';
+import SchoolManagement from './admin/SchoolManagement';
+import DepartmentManagement from './admin/DepartmentManagement';
+import DeanManagement from './admin/DeanManagement';
+import HODManagement from './admin/HODManagement';
 import ForumModeration from './admin/ForumModeration';
 import RoleManagement from './admin/RoleManagement';
 
@@ -359,6 +363,10 @@ const AdminDashboard = () => {
             <Route path="teachers" element={<TeacherManagement currentUser={currentUser} />} />
             <Route path="students" element={<StudentManagement currentUser={currentUser} />} />
             <Route path="courses" element={<CourseManagement currentUser={currentUser} />} />
+            <Route path="schools" element={<SchoolManagement />} />
+            <Route path="departments" element={<DepartmentManagement />} />
+            <Route path="deans" element={<DeanManagement />} />
+            <Route path="hods" element={<HODManagement />} />
             <Route path="enhanced-analytics" element={<EnhancedAnalytics />} />
             <Route path="forum/*" element={<ForumModeration currentUser={currentUser} />} />
             <Route path="announcements" element={<AnnouncementPage role="admin" />} />

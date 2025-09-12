@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  regNo: { type: String, index: true }, // Only for students
-  teacherId: { type: String, index: true }, // Only for teachers (T followed by 4 digits)
+  regNo: { type: String, unique: true, sparse: true, index: true }, // Only for students - unique and sparse to allow null values
+  teacherId: { type: String, unique: true, sparse: true, index: true }, // Only for teachers - unique and sparse
   name: { type: String, required: true },
   email: { 
     type: String, 
@@ -12,9 +12,21 @@ const userSchema = new mongoose.Schema({
     set: v => v.toLowerCase() // Convert email to lowercase before saving
   },
   password: { type: String, required: true },
-  role: { type: String, enum: ['admin', 'teacher', 'student'], required: true },
+  role: { type: String, enum: ['admin', 'teacher', 'student', 'dean', 'hod'], required: true },
   permissions: [{ type: String }], // e.g., ['manage_teachers', 'manage_students']
   coursesAssigned: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Course', index: true }],
+  
+  // New hierarchy fields
+  school: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'School',
+    index: true
+  },
+  department: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Department',
+    index: true
+  },
   watchHistory: [{
     video: { type: mongoose.Schema.Types.ObjectId, ref: 'Video' },
     timeSpent: { type: Number, default: 0 }, // in seconds

@@ -565,6 +565,9 @@ exports.updateWatchHistory = async (req, res) => {
             const unitVideosCompleted = progress.units[unitIndex].videosWatched.filter(v => v.completed).length;
             const totalUnitVideos = unit.videos.length;
             
+            // Update the videosCompleted counter to match
+            progress.units[unitIndex].videosCompleted = unitVideosCompleted;
+            
             console.log(`[updateWatchHistory] Unit ${unit.title}: ${unitVideosCompleted}/${totalUnitVideos} videos completed`);
             
             // If all videos in unit are completed, mark unit videos as completed

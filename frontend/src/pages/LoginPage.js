@@ -20,6 +20,10 @@ const LoginPage = () => {
         // Redirect based on user role
         if (user.role === 'admin') {
           navigate('/admin');
+        } else if (user.role === 'dean') {
+          navigate('/dean');
+        } else if (user.role === 'hod') {
+          navigate('/hod');
         } else if (user.role === 'teacher') {
           navigate('/teacher');
         } else if (user.role === 'student') {
@@ -47,6 +51,10 @@ const LoginPage = () => {
       // Redirect based on user role
       if (user.role === 'admin') {
         navigate('/admin');
+      } else if (user.role === 'dean') {
+        navigate('/dean');
+      } else if (user.role === 'hod') {
+        navigate('/hod');
       } else if (user.role === 'teacher') {
         navigate('/teacher');
       } else if (user.role === 'student') {
